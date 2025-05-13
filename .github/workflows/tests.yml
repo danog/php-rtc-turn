@@ -6,9 +6,6 @@ on:
   pull_request:
     branches: [ "master" ]
 
-permissions:
-  contents: read
-
 jobs:
   test:
     runs-on: ubuntu-latest
@@ -16,43 +13,43 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up PHP 8.4
+      - name: Set up PHP
         uses: shivammathur/setup-php@v2
         with:
-          php-version: 8.4
+          php-version: '8.4'
           tools: composer:v2
 
-      - name: Validate composer.json and composer.lock
-        run: composer validate --strict
-
-      - name: Cache Composer packages
-        id: composer-cache
-        uses: actions/cache@v3
-        with:
-          path: vendor
-          key: ${{ runner.os }}-php-${{ hashFiles('**/composer.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-php-
-
       - name: Install dependencies
-        run: composer install --prefer-dist --no-progress
+        run: composer install
 
       - name: Install and configure Coturn
         run: |
           sudo apt-get update
           sudo apt-get install -y coturn
+          
+          # Stop any running Coturn service first
+          sudo systemctl stop coturn || true
+          
+          # Create directories and copy files
           sudo mkdir -p /etc/turnserver
           sudo cp tests/turnconfig/turnserver.conf /etc/turnserver/
           sudo cp tests/turnconfig/turnserver.crt /etc/turnserver/
           sudo cp tests/turnconfig/turnserver.key /etc/turnserver/
-          sudo systemctl start coturn
-
-      - name: Check PHP version and extensions
-        run: |
-          php -v
-          php -m | grep -i gmp
-          # Verify Coturn is running
-          sudo systemctl status coturn
+          
+          # Create log directory
+          sudo mkdir -p /var/log/
+          sudo touch /var/log/turnserver.log
+          sudo chmod 666 /var/log/turnserver.log
+          
+          # Start Coturn with our custom config
+          sudo turnserver -c /etc/turnserver/turnserver.conf -v &
+          
+          # Wait for server to start
+          sleep 5
+          
+          # Verify server is running
+          ps aux | grep turnserver
+          netstat -tulnp | grep -E '3478|5349'
 
       - name: Run PHPUnit tests
         run: vendor/bin/phpunit

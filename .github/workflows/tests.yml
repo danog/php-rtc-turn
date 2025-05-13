@@ -48,7 +48,17 @@ jobs:
 
       - name: Start coturn
         run: |
-          sudo turnserver -c /etc/turnserver/turnserver.conf --daemon
+          sudo turnserver -c /etc/turnserver/turnserver.conf -v &
+          sleep 5
+
+      - name: Check if Coturn is listening
+        run: |
+          sudo netstat -tulpn | grep turnserver || echo "Coturn not listening"
+
+      - name: Print coturn logs if available
+        if: always()
+        run: |
+          sudo cat /var/log/turnserver.log || echo "No turnserver.log found"
 
       - name: Check PHP version and extensions
         run: |

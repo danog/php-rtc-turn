@@ -4,7 +4,6 @@ namespace Tests\Webrtc\TURN;
 
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\UsesClass;
-use Webrtc\ICE\RTCIceProtocolConfiguration;
 use Webrtc\STUN\Message\Message;
 use Webrtc\STUN\Message\MessageAttributeCollection;
 use Webrtc\STUN\Message\MessageAttributeEncoder;
@@ -13,7 +12,6 @@ use Webrtc\STUN\Utils;
 use Webrtc\TURN\TurnTcpConnection;
 use PHPUnit\Framework\TestCase;
 
-#[UsesClass(RTCIceProtocolConfiguration::class)]
 #[UsesClass(Message::class)]
 #[UsesClass(MessageAttributeCollection::class)]
 #[UsesClass(MessageAttributeEncoder::class)]
@@ -23,13 +21,13 @@ use PHPUnit\Framework\TestCase;
 class TurnTcpConnectionTest extends TestCase
 {
     protected TurnTcpConnection $protocol;
-    private RTCIceProtocolConfiguration $turnConfiguration;
+    private TurnConfiguration $turnConfiguration;
     private Receiver $receiver;
 
     protected function setUp(): void
     {
         // Default TURN configuration
-        $this->turnConfiguration = new RTCIceProtocolConfiguration();
+        $this->turnConfiguration = new TurnConfiguration();
         $this->turnConfiguration->setTurnServer(["127.0.0.1", 3478]);
         $this->turnConfiguration->setTurnUsername("quasarstream");
         $this->turnConfiguration->setTurnPassword("123");

@@ -28,7 +28,6 @@
     "psr/log": "^3.0",
     "quasarstream/exception": "^1.0",
     "quasarstream/mixin": "^1.0",
-    "quasarstream/ice": "^1.0",
     "quasarstream/stun": "^1.0",
     "react/event-loop": "^1.5",
     "react/promise": "^3.2",
@@ -49,5 +48,6 @@
       "Tests\\Webrtc\\TURN\\": "tests"
     }
   },
-  "minimum-stability": "dev"
+  "minimum-stability": "dev",
+  "prefer-stable": true
 }

@@ -3,7 +3,6 @@
 namespace Tests\Webrtc\TURN;
 
 use PHPUnit\Framework\Attributes\CoversClass;
-use Webrtc\ICE\RTCIceProtocolConfiguration;
 use Webrtc\TURN\TurnUdpConnection;
 use PHPUnit\Framework\TestCase;
 
@@ -12,13 +11,13 @@ use PHPUnit\Framework\TestCase;
 class TurnUDPConnectionTest extends TestCase
 {
     protected $protocol;
-    private RTCIceProtocolConfiguration $turnConfiguration;
+    private TurnConfiguration $turnConfiguration;
     private Receiver $receiver;
 
     protected function setUp(): void
     {
         // Default TURN configuration
-        $this->turnConfiguration = new RTCIceProtocolConfiguration();
+        $this->turnConfiguration = new TurnConfiguration();
         $this->turnConfiguration->setTurnServer(["127.0.0.1", 3478]);
         $this->turnConfiguration->setTurnUsername("quasarstream");
         $this->turnConfiguration->setTurnPassword("123");

@@ -5,14 +5,7 @@ namespace Tests\Webrtc\TURN;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\UsesClass;
 use PHPUnit\Framework\TestCase;
-use React\Promise\Deferred;
-use React\Promise\PromiseInterface;
 use Webrtc\Exception\RuntimeException;
-use Webrtc\ICE\RTCIceProtocolConfiguration;
-use Webrtc\MDNS\MulticastExecutor;
-use Webrtc\SCTP\RTCSctpTransport;
-use Webrtc\SCTP\SctpUtility;
-use Webrtc\SCTP\Trait\DataChannel;
 use Webrtc\STUN\Exception\TransactionException;
 use Webrtc\STUN\Exception\TransactionExceptionInterface;
 use Webrtc\STUN\Exception\TransactionFailedException;
@@ -32,7 +25,6 @@ use function React\Async\delay;
 
 #[UsesClass(TurnTcpConnection::class)]
 #[UsesClass(TurnUdpConnection::class)]
-#[UsesClass(RTCIceProtocolConfiguration::class)]
 #[UsesClass(TransactionException::class)]
 #[UsesClass(TransactionFailedException::class)]
 #[UsesClass(TransactionTimeoutException::class)]
@@ -42,14 +34,10 @@ use function React\Async\delay;
 #[UsesClass(MessageIntegrity::class)]
 #[UsesClass(Transaction::class)]
 #[UsesClass(Utils::class)]
-#[UsesClass(RTCSctpTransport::class)]
-#[UsesClass(SctpUtility::class)]
-#[UsesClass(DataChannel::class)]
-#[UsesClass(MulticastExecutor::class)]
 #[CoversClass(Turn::class)]
 class TurnTest extends TestCase
 {
-    private RTCIceProtocolConfiguration $turnConfiguration;
+    private TurnConfiguration $turnConfiguration;
     private EchoServer $echoServer1;
     private EchoServer $echoServer2;
     private Receiver $receiver;
@@ -59,7 +47,7 @@ class TurnTest extends TestCase
         parent::setUp();
 
         // Default TURN configuration
-        $this->turnConfiguration = new RTCIceProtocolConfiguration();
+        $this->turnConfiguration = new TurnConfiguration();
         $this->turnConfiguration->setTurnUsername("quasarstream");
 
         $this->receiver = new Receiver();

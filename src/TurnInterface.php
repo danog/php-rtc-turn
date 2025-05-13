@@ -12,7 +12,6 @@
 namespace Webrtc\TURN;
 
 use Psr\Log\LoggerInterface;
-use Random\RandomException;
 use React\Promise\PromiseInterface;
 use Webrtc\STUN\IceConnectionProtocolInterface;
 use Webrtc\STUN\ReceiverInterface;

@@ -136,7 +136,9 @@ class TurnTest extends TestCase
         })();
 
         $this->expectException(TransactionExceptionInterface::class);
-        $this->expectExceptionMessage("Failed to request with retry: STUN transaction failed (401 - Unauthorized)");
+        // The reason phrase is advisory and server-dependent — coturn sends none — so the
+        // assertion is on the 401 error code, which is what the protocol actually guarantees.
+        $this->expectExceptionMessageMatches('/^Failed to request with retry: STUN transaction failed \(401\b/');
         await($turn->connect());
     }
 

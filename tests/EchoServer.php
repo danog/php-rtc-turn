@@ -3,15 +3,14 @@
 namespace Tests\Webrtc\TURN;
 
 use Ramsey\Uuid\Uuid;
-use React\Datagram\Factory;
-use React\Datagram\SocketInterface;
+use Amp\Socket\UdpSocket;
 use Webrtc\Exception\RuntimeException;
 use Webrtc\STUN\Datagram;
-use function React\Async\await;
+use function Amp\Socket\bindUdpSocket;
 
 class EchoServer extends Datagram
 {
-    public function __construct(SocketInterface $socket)
+    public function __construct(UdpSocket $socket)
     {
         parent::__construct($socket);
     }
@@ -31,9 +30,8 @@ class EchoServer extends Datagram
 
     public static function create(string $host = "127.0.0.1", int $port = 0): self
     {
-        $factory = new Factory();
         try {
-            $socket = await($factory->createServer("$host:$port"));
+            $socket = bindUdpSocket("$host:$port");
             return new static($socket);
         } catch (\Throwable $e) {
             throw new RuntimeException(sprintf("Could not bind to %s - %s", "$host:$port", $e->getMessage()), $e->getCode(), $e);

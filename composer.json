@@ -25,13 +25,12 @@
     ],
     "require": {
         "php": "^8.2",
+        "amphp/amp": "^3.1",
+        "amphp/socket": "^2.3",
         "psr/log": "^3.0",
         "quasarstream/exception": "^1.0",
         "quasarstream/mixin": "^1.0",
-        "quasarstream/stun": "^1.0",
-        "react/event-loop": "^1.5",
-        "react/promise": "^3.2",
-        "react/socket": "^1.16"
+        "quasarstream/stun": "^1.0"
     },
     "require-dev": {
         "phpunit/php-code-coverage": "11.0.x-dev",

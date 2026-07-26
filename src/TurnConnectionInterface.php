@@ -13,18 +13,17 @@ namespace Webrtc\TURN;
 
 use Psr\Log\LoggerInterface;
 use Random\RandomException;
-use React\Promise\PromiseInterface;
 use Webrtc\STUN\IceConnectionProtocolInterface;
 use Webrtc\STUN\ReceiverInterface;
 
 interface TurnConnectionInterface extends IceConnectionProtocolInterface
 {
-    public function connect(): PromiseInterface;
+    public function connect(): ?array;
 
     public function delete(): void;
 
     public function getRelayedAddress(): ?array;
 
-    public function sendData(string $data, string $addr): PromiseInterface;
+    public function sendData(string $data, string $addr): void;
 
 }

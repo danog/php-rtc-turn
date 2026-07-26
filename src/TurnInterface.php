@@ -12,13 +12,12 @@
 namespace Webrtc\TURN;
 
 use Psr\Log\LoggerInterface;
-use React\Promise\PromiseInterface;
 use Webrtc\STUN\IceConnectionProtocolInterface;
 use Webrtc\STUN\ReceiverInterface;
 
 interface TurnInterface extends IceConnectionProtocolInterface
 {
-    public function connect(): PromiseInterface;
+    public function connect(): ?array;
 
     public function delete(): void;
 

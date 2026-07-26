@@ -11,11 +11,10 @@
 
 namespace Webrtc\TURN;
 
-use React\Socket\ConnectionInterface;
+use Amp\Socket\Socket;
 use Throwable;
-use Webrtc\Mixin\EventForwarder;
 use Webrtc\STUN\BaseProtocol;
-use function call_user_func_array;
+use function Amp\async;
 use function parse_url;
 
 /**
@@ -27,26 +26,43 @@ use function parse_url;
  */
 abstract class TCPConnection extends BaseProtocol
 {
-    use EventForwarder;
-
-    /**
-     * @var array<string, string> Map of socket events to handler methods
-     */
-    private const FORWARD_EVENT_METHOD_MAP = [
-        "data" => "onTCPReceived",
-        "end" => "onEnded",
-        "error" => "onError",
-        "close" => "onClose"
-    ];
+    /** Whether the read loop should keep delivering data. */
+    private bool $paused = false;
 
     /**
      * TCP connection constructor.
      *
-     * @param ConnectionInterface $socket The established TCP socket connection
+     * @param Socket $socket The established TCP socket connection
      */
-    public function __construct(protected ConnectionInterface $socket)
+    public function __construct(protected Socket $socket)
     {
-        $this->forwardEvents2Methods($socket, self::FORWARD_EVENT_METHOD_MAP);
+        $this->listen();
+    }
+
+    /**
+     * Deliver incoming data to onTCPReceived() until the peer closes.
+     *
+     * Reading runs in its own fiber rather than through an event emitter, so a read error
+     * reaches onError() rather than becoming an unobserved rejection.
+     */
+    private function listen(): void
+    {
+        async(function (): void {
+            try {
+                while (($chunk = $this->socket->read()) !== null) {
+                    if ($this->paused) {
+                        continue;
+                    }
+
+                    $this->onTCPReceived($chunk);
+                }
+
+                $this->onEnded();
+                $this->onClose();
+            } catch (Throwable $e) {
+                $this->onError($e);
+            }
+        });
     }
 
     /**
@@ -88,7 +104,7 @@ abstract class TCPConnection extends BaseProtocol
      */
     public function resume(): void
     {
-        $this->socket->resume();
+        $this->paused = false;
     }
 
     /**
@@ -98,7 +114,7 @@ abstract class TCPConnection extends BaseProtocol
      */
     public function pause(): void
     {
-        $this->socket->pause();
+        $this->paused = true;
     }
 
     /**
@@ -108,7 +124,7 @@ abstract class TCPConnection extends BaseProtocol
      */
     public function getLocalAddress(): string
     {
-        return $this->socket->getLocalAddress();
+        return (string) $this->socket->getLocalAddress();
     }
 
     /**
@@ -138,7 +154,9 @@ abstract class TCPConnection extends BaseProtocol
      */
     public function getRemoteAddress(): ?string
     {
-        return $this->socket->getRemoteAddress();
+        $address = $this->socket->getRemoteAddress();
+
+        return $address === null ? null : (string) $address;
     }
 
     /**
@@ -179,28 +197,4 @@ abstract class TCPConnection extends BaseProtocol
      */
     protected abstract function padded(string $data): string;
 
-    /**
-     * Check if argument is the socket or this instance
-     *
-     * @param mixed $argument The argument to check
-     * @return TCPConnection|ConnectionInterface Returns $this if argument is the socket, otherwise returns the argument
-     */
-    private function isInstanceofArgument(mixed $argument): TCPConnection|ConnectionInterface
-    {
-        return ($argument instanceof $this->socket) ? $this : $argument;
-    }
-
-    /**
-     * Magic method to delegate calls to the underlying socket
-     *
-     * @param string $method The method name to call
-     * @param array $parameters The method parameters
-     * @return TCPConnection|ConnectionInterface
-     */
-    public function __call(string $method, array $parameters)
-    {
-        return $this->isInstanceofArgument(
-            call_user_func_array([$this->socket, $method], $parameters)
-        );
-    }
 }

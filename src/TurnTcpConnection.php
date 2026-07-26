@@ -14,16 +14,16 @@ namespace Webrtc\TURN;
 use Psr\Log\LoggerInterface;
 use Ramsey\Uuid\Uuid;
 use Random\RandomException;
-use React\EventLoop\Loop;
-use React\Socket\ConnectionInterface;
-use React\Socket\Connector;
+use Amp\Socket\ClientTlsContext;
+use Amp\Socket\ConnectContext;
+use Amp\Socket\Socket;
+use function Amp\Socket\connect;
 use Throwable;
 use Webrtc\Exception\RuntimeException;
 use Webrtc\STUN\ReceiverInterface;
 use Webrtc\STUN\Trait\Request;
 use Webrtc\STUN\Utils;
 use Webrtc\TURN\Trait\TurnConnection;
-use function React\Async\await;
 
 /**
  * Class TurnTcpConnection
@@ -40,15 +40,14 @@ class TurnTcpConnection extends TCPConnection implements TurnConnectionInterface
      * @param TurnConfigurationInterface $configuration
      * @param ReceiverInterface $receiver
      * @param ?LoggerInterface $logger
-     * @param ConnectionInterface $socket
+     * @param Socket $socket
      */
     public function __construct(private readonly TurnConfigurationInterface $configuration,
                                 private readonly ReceiverInterface          $receiver,
                                 private readonly ?LoggerInterface            $logger,
-                                ConnectionInterface                         $socket)
+                                Socket                                      $socket)
     {
         parent::__construct($socket);
-        $this->_loop = Loop::get();
         $this->id = Uuid::uuid4()->toString();
     }
 
@@ -115,10 +114,19 @@ class TurnTcpConnection extends TCPConnection implements TurnConnectionInterface
     public static function create(TurnConfigurationInterface $configuration, ReceiverInterface $receiver, ?LoggerInterface $logger = null): self
     {
         $address = implode(":", $configuration->getTurnServer());
-        $connector = new Connector(['tls' => $configuration->getTurnSsl()]);
 
         try {
-            $socket = await($connector->connect($address));
+            $context = (new ConnectContext())->withTlsContext(
+                (new ClientTlsContext($configuration->getTurnServer()[0]))->withoutPeerVerification()
+            );
+
+            $socket = connect($address, $context);
+            if ($configuration->getTurnSsl()) {
+                // TURN over TLS starts the handshake immediately rather than after a STARTTLS
+                // style upgrade, so it has to happen before the first allocation is sent.
+                $socket->setupTls();
+            }
+
             return new static($configuration, $receiver, $logger, $socket);
         } catch (Throwable $e) {
             throw new RuntimeException(sprintf("Could not connect to %s - %s", $address, $e->getMessage()), $e->getCode(), $e);

@@ -13,16 +13,14 @@ namespace Webrtc\TURN;
 
 use Psr\Log\LoggerInterface;
 use Ramsey\Uuid\Uuid;
-use React\Datagram\Factory;
-use React\Datagram\SocketInterface;
-use React\EventLoop\Loop;
+use Amp\Socket\UdpSocket;
 use Throwable;
 use Webrtc\Exception\RuntimeException;
 use Webrtc\STUN\Datagram;
 use Webrtc\STUN\ReceiverInterface;
 use Webrtc\STUN\Trait\Request;
 use Webrtc\TURN\Trait\TurnConnection;
-use function React\Async\await;
+use function Amp\Socket\bindUdpSocket;
 
 /**
  * Class TurnUDPConnection
@@ -38,15 +36,14 @@ class TurnUdpConnection extends Datagram implements TurnConnectionInterface
      * @param TurnConfigurationInterface $configuration
      * @param ReceiverInterface $receiver
      * @param ?LoggerInterface $logger
-     * @param SocketInterface $socket
+     * @param UdpSocket $socket
      */
     public function __construct(private readonly TurnConfigurationInterface $configuration,
                                 private readonly ReceiverInterface          $receiver,
                                 private readonly ?LoggerInterface            $logger,
-                                SocketInterface                             $socket)
+                                UdpSocket                                   $socket)
     {
         $this->remoteAddress = implode(":", $this->configuration->getTurnServer());
-        $this->_loop = Loop::get();
         $this->id = Uuid::uuid4()->toString();
         parent::__construct($socket);
     }
@@ -69,9 +66,10 @@ class TurnUdpConnection extends Datagram implements TurnConnectionInterface
      */
     public static function create(TurnConfigurationInterface $configuration, ReceiverInterface $receiver, ?LoggerInterface $logger = null): self
     {
-        $factory = new Factory();
         try {
-            $socket = await($factory->createClient(implode(":", $configuration->getTurnServer())));
+            // Bind an ephemeral local socket; the server address is kept as the default
+            // destination rather than connecting, so the same socket can also reach peers.
+            $socket = bindUdpSocket('0.0.0.0:0');
             return new static($configuration, $receiver, $logger, $socket);
         } catch (Throwable $e) {
             throw new RuntimeException(sprintf("Could not bind to %s", $e->getMessage()), $e->getCode(), $e);

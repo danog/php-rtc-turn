@@ -13,11 +13,9 @@ namespace Webrtc\TURN\Trait;
 
 use Exception;
 use Random\RandomException;
-use React\EventLoop\Loop;
-use React\EventLoop\LoopInterface;
-use React\EventLoop\TimerInterface;
-use React\Promise\Deferred;
-use React\Promise\PromiseInterface;
+use Amp\DeferredFuture;
+use Amp\Future;
+use Revolt\EventLoop;
 use Throwable;
 use Webrtc\Exception\InvalidArgumentException;
 use Webrtc\STUN\Enum\MessageAttribute;
@@ -65,15 +63,17 @@ trait TurnConnection
     private ?string $realm = null;
 
     /**
-     * @var ?TimerInterface The timer used for refreshing the connection.
+     * @var ?string Handle of the timer used for refreshing the connection.
      */
-    private ?TimerInterface $refreshPeriodicTimer = null;
+    private ?string $refreshPeriodicTimer = null;
 
     /**
-     * @var array An associative array to store waiters for peer connection.
-     * Key: peer address, Value: array of Deferred objects.
+     * @var array<string, Future> Channel binds in flight, keyed by peer address.
+     *
+     * Two sends to the same unbound peer must not each allocate a channel, so the second
+     * waits on the bind the first started rather than starting its own.
      */
-    private array $peerConnectWaiters = [];
+    private array $peerBinding = [];
 
     /**
      * @var array An associative array to map peers to channels.
@@ -103,13 +103,7 @@ trait TurnConnection
      */
     private array $channelRefreshAt = [];
 
-    /**
-     * @var ?LoopInterface An instance of the loop interface (optional).
-     */
-    private ?LoopInterface $_loop = null;
 
-    private array $sendQueue = [];
-    private bool $isProcessing = false;
 
     /**
      * Get the lifetime of the connection.
@@ -141,74 +135,55 @@ trait TurnConnection
      *
      * @param int $channelNumber The channel number.
      * @param string $address The peer address.
-     * @return PromiseInterface A promise that resolves when the channel is bound.
+     * @return void Returns once the channel is bound.
      * @throws RandomException
      */
-    private function channelBind(int $channelNumber, string $address): PromiseInterface
+    private function channelBind(int $channelNumber, string $address): void
     {
-        $deferred = new Deferred();
         $messageAttr = [
             MessageAttribute::CHANNEL_NUMBER->name => $channelNumber,
             MessageAttribute::XOR_PEER_ADDRESS->name => explode(":", $address)
         ];
         $message = Message::new(MessageClass::REQUEST, MessageMethod::CHANNEL_BIND, $messageAttr);
 
-        $this->requestWithRetry($message)->then(
-            function () use ($deferred): void {
-                $deferred->resolve(null);
-            },
-            function ($e) use ($deferred): void {
-                $deferred->reject($e);
-            }
-        );
-
-        return $deferred->promise();
+        $this->requestWithRetry($message);
     }
 
     /**
-     * Initiates a TURN connection and returns a PromiseInterface.
+     * Initiates a TURN connection and allocates a relay.
      *
      * This method establishes a connection with a TURN server and allocates resources.
-     * It uses promises to handle the asynchronous nature of the connection process.
      *
-     * @return PromiseInterface A promise that resolves to the connection details or rejects with an error.
+     * @return array{string, int}|null The relayed address the server allocated.
      * @throws RandomException
      */
-    public function connect(): PromiseInterface
+    public function connect(): ?array
     {
-        $deferred = new Deferred();
-
         $messageAttr = [
             MessageAttribute::LIFETIME->name => $this->lifetime,
             MessageAttribute::REQUESTED_TRANSPORT->name => self::UDP_TRANSPORT
         ];
         $message = Message::new(MessageClass::REQUEST, MessageMethod::ALLOCATE, $messageAttr);
 
-        $this->requestWithRetry($message)
-            ->then(
-                function (array $response) use ($deferred) {
-                    $message = $response[0];
-                    if ($message instanceof Message) {
-                        $timeToExpiry = $message->attributes()->get(MessageAttribute::LIFETIME);
-                        $this->relayedAddress = $message->attributes()->get(MessageAttribute::XOR_RELAYED_ADDRESS);
-                    }
+        [$response] = $this->requestWithRetry($message);
 
-                    return $timeToExpiry ?? null;
-                })
-            ->then(function (?int $timeToExpiry) use ($deferred): void {
-                if ($timeToExpiry) {
-                    $this->refreshPeriodicTimer = $this->_loop->addPeriodicTimer($timeToExpiry * 5 / 6, function (): void {
-                        $this->refresh();
-                    });
+        $timeToExpiry = null;
+        if ($response instanceof Message) {
+            $timeToExpiry = $response->attributes()->get(MessageAttribute::LIFETIME);
+            $this->relayedAddress = $response->attributes()->get(MessageAttribute::XOR_RELAYED_ADDRESS);
+        }
+
+        if ($timeToExpiry) {
+            // Refresh well before the allocation expires, as RFC 8656 section 3.2 advises.
+            $this->refreshPeriodicTimer = EventLoop::repeat(
+                $timeToExpiry * 5 / 6,
+                function (): void {
+                    $this->refresh();
                 }
+            );
+        }
 
-                $deferred->resolve($this->relayedAddress);
-            })
-            ->catch(function (Exception $e) use ($deferred): void {
-                $deferred->reject($e);
-            });
-
-        return $deferred->promise();
+        return $this->relayedAddress;
     }
 
     /**
@@ -382,7 +357,7 @@ trait TurnConnection
     public function delete(): void
     {
         if ($this->refreshPeriodicTimer) {
-            Loop::cancelTimer($this->refreshPeriodicTimer);
+            EventLoop::cancel($this->refreshPeriodicTimer);
             $this->refreshPeriodicTimer = null;
         }
 
@@ -390,13 +365,14 @@ trait TurnConnection
             MessageAttribute::LIFETIME->name => 0
         ];
         $message = Message::new(MessageClass::REQUEST, MessageMethod::REFRESH, $messageAttr);
-        $this->requestWithRetry($message)->then(function () {
+        try {
+            $this->requestWithRetry($message);
             $this->logger?->info("TURN allocation deleted", ["RelayedAddress" => $this->relayedAddress]);
-            $this->close();
-        })->catch(function () {
+        } catch (Throwable) {
             $this->logger?->error("Could not TURN allocation deleted", ["RelayedAddress" => $this->relayedAddress]);
+        } finally {
             $this->close();
-        });
+        }
 
     }
 
@@ -417,18 +393,16 @@ trait TurnConnection
         ];
         $message = Message::new(MessageClass::REQUEST, MessageMethod::REFRESH, $messageAttr);
 
-        $this->requestWithRetry($message)->then(
-            function ($response): void {
-                $message = $response[0];
-                if ($message instanceof Message) {
-                    $timeToExpiry = $message->attributes()->get(MessageAttribute::LIFETIME);
-                    $this->logger->info("TURN allocation refreshed", ["RelatedAddress" => $this->relayedAddress, "ExpiresInSeconds" => $timeToExpiry]);
-                }
-            },
-            function (Throwable $e): void {
-                $this->logger->error("TURN allocation refreshed failed", ["RelatedAddress" => $this->relayedAddress, "ErrorMessage" => $e->getMessage()]);
+        try {
+            [$response] = $this->requestWithRetry($message);
+
+            if ($response instanceof Message) {
+                $timeToExpiry = $response->attributes()->get(MessageAttribute::LIFETIME);
+                $this->logger?->info("TURN allocation refreshed", ["RelatedAddress" => $this->relayedAddress, "ExpiresInSeconds" => $timeToExpiry]);
             }
-        );
+        } catch (Throwable $e) {
+            $this->logger?->error("TURN allocation refreshed failed", ["RelatedAddress" => $this->relayedAddress, "ErrorMessage" => $e->getMessage()]);
+        }
     }
 
     /**
@@ -437,22 +411,18 @@ trait TurnConnection
      * This method sends the given message and handles potential authentication failures. If an authentication error occurs, it updates the long-term credentials and retries the request with the updated credentials.
      *
      * @param MessageInterface $message The message to be sent.
-     * @return PromiseInterface A promise that resolves to the response or rejects with an error.
+     * @return array{MessageInterface, string|null} The response and where it came from.
+     * @throws TransactionExceptionInterface If the request failed for a reason retrying cannot fix.
      */
-    private function requestWithRetry(MessageInterface $message): PromiseInterface
+    private function requestWithRetry(MessageInterface $message): array
     {
-        $deferred = new Deferred();
         $this->addAuthenticatedAttributes($message);
-        $this->request($message, null, $this->integrityKey)->then(
-            function ($response) use ($deferred): void {
-                $deferred->resolve($response);
-            },
-            function (TransactionExceptionInterface $e) use ($message, $deferred): void {
-                $this->handleRetryRequestError($e, $message, $deferred);
-            }
-        );
 
-        return $deferred->promise();
+        try {
+            return $this->request($message, null, $this->integrityKey);
+        } catch (TransactionExceptionInterface $e) {
+            return $this->handleRetryRequestError($e, $message);
+        }
     }
 
     /**
@@ -460,11 +430,10 @@ trait TurnConnection
      *
      * @param TransactionExceptionInterface $error
      * @param MessageInterface $message
-     * @param Deferred $deferred
-     * @return void
+     * @return array{MessageInterface, string|null} The response to the retried request.
      * @throws RandomException
      */
-    private function handleRetryRequestError(TransactionExceptionInterface $error, MessageInterface $message, Deferred $deferred): void
+    private function handleRetryRequestError(TransactionExceptionInterface $error, MessageInterface $message): array
     {
         $errorCode = $error->getStunMessage()?->attributes()->get(MessageAttribute::ERROR_CODE)[0];
 
@@ -483,17 +452,18 @@ trait TurnConnection
             $this->makeIntegrityKey();
             $this->addAuthenticatedAttributes($message);
 
-            $this->request($message, null, $this->integrityKey)->then(function ($response) use ($deferred): void {
-                $deferred->resolve($response);
-            }, function (TransactionExceptionInterface $e) use ($deferred): void {
+            try {
+                return $this->request($message, null, $this->integrityKey);
+            } catch (TransactionExceptionInterface $e) {
                 $this->logger?->error("Failed to request with retry: {$e->getMessage()}");
 
-                $deferred->reject(new TransactionException("Failed to request with retry: {$e->getMessage()}", $e->getCode(), $e));
-            });
-        } else {
-            $this->logger?->error("Error processing request: {$error->getMessage()}");
-            $deferred->reject($error);
+                throw new TransactionException("Failed to request with retry: {$e->getMessage()}", $e->getCode(), $e);
+            }
         }
+
+        $this->logger?->error("Error processing request: {$error->getMessage()}");
+
+        throw $error;
     }
 
     /**
@@ -527,75 +497,58 @@ trait TurnConnection
     /**
      * Sends data to a specific address.
      *
-     * This method handles sending data by using channels. It first checks if a channel is already bound for the peer. If not, it binds a new channel and updates the internal state. If the channel needs refreshing, it rebinds the channel. Finally, it sends the data using the established channel.
+     * Data travels over a TURN channel, which has to be bound to the peer first and rebound
+     * before it expires. Both happen inline here: the fiber simply waits for the bind.
      *
      * @param string $data The data to be sent.
      * @param string $addr The address of the recipient.
-     * @return PromiseInterface
-     * @throws RandomException
-     */
-    public function sendData(string $data, string $addr): PromiseInterface
-    {
-        $deferred = new Deferred();
-        $this->sendQueue[] = [$data, $addr, $deferred];
-
-        if (!$this->isProcessing) {
-            $this->isProcessing = true;
-            $this->processQueue();
-        }
-
-        return $deferred->promise();
-    }
-
-
-    /**
      * @return void
      * @throws RandomException
      */
-    private function processQueue(): void
+    public function sendData(string $data, string $addr): void
     {
-        if (empty($this->sendQueue)) {
-            $this->isProcessing = false;
-            return;
+        $this->ensureChannel($addr);
+        $this->sendPacket($this->peerToChannel[$addr], $data);
+    }
+
+    /**
+     * Make sure a live channel exists for a peer, binding or rebinding it if not.
+     *
+     * @throws RandomException
+     */
+    private function ensureChannel(string $addr): void
+    {
+        // Another fiber may already be binding this peer; take its result rather than
+        // allocating a second channel for the same address.
+        while (isset($this->peerBinding[$addr])) {
+            $this->peerBinding[$addr]->await();
         }
 
-        [$data, $addr, $deferred] = array_shift($this->sendQueue);
         $now = time();
         $channel = $this->peerToChannel[$addr] ?? null;
 
-        if ($channel === null) {
-            $this->peerConnectWaiters[$addr] = [];
-            $channel = $this->channelNumber++;
+        if ($channel !== null && $now <= ($this->channelRefreshAt[$channel] ?? 0)) {
+            return;
+        }
 
-            $this->channelBind($channel, $addr)->then(function () use ($channel, $addr, $now, $data, $deferred) {
-                $this->channelRefreshAt[$channel] = $now + $this->channelRefreshTime;
-                $this->channelToPeer[$channel] = $addr;
-                $this->peerToChannel[$addr] = $channel;
+        $channel ??= $this->channelNumber++;
+        $deferred = new DeferredFuture();
+        $this->peerBinding[$addr] = $deferred->getFuture();
 
-                foreach ($this->peerConnectWaiters[$addr] as $waiter) {
-                    $waiter->resolve(null);
-                }
-                unset($this->peerConnectWaiters[$addr]);
+        try {
+            $this->channelBind($channel, $addr);
 
-                $this->sendPacket($channel, $data);
-                $deferred->resolve(null);
+            $this->channelRefreshAt[$channel] = $now + $this->channelRefreshTime;
+            $this->channelToPeer[$channel] = $addr;
+            $this->peerToChannel[$addr] = $channel;
 
-                $this->processQueue();
-            });
-        } elseif ($now > ($this->channelRefreshAt[$channel] ?? 0)) {
-            $this->channelBind($channel, $addr)->then(function () use ($channel, $now, $data, $deferred) {
-                $this->channelRefreshAt[$channel] = $now + $this->channelRefreshTime;
+            unset($this->peerBinding[$addr]);
+            $deferred->complete();
+        } catch (\Throwable $e) {
+            unset($this->peerBinding[$addr]);
+            $deferred->error($e);
 
-                $this->sendPacket($channel, $data);
-                $deferred->resolve(null);
-
-                $this->processQueue();
-            });
-        } else {
-            $this->sendPacket($channel, $data);
-            $deferred->resolve(null);
-
-            $this->processQueue();
+            throw $e;
         }
     }
 

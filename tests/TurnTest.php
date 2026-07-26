@@ -19,9 +19,8 @@ use Webrtc\STUN\Utils;
 use Webrtc\TURN\Turn;
 use Webrtc\TURN\TurnTcpConnection;
 use Webrtc\TURN\TurnUdpConnection;
-use function React\Async\async;
-use function React\Async\await;
-use function React\Async\delay;
+use function Amp\async;
+use function Amp\delay;
 
 #[UsesClass(TurnTcpConnection::class)]
 #[UsesClass(TurnUdpConnection::class)]
@@ -88,7 +87,7 @@ class TurnTest extends TestCase
     private function testTransportOk($transport, $ssl)
     {
         $turn = $this->createTurn($transport, $ssl);
-        await($turn->connect());
+        $turn->connect();
 
         $this->assertNotNull($turn->getLocalHost());
         $this->assertNotNull($turn->getRelayedAddress());
@@ -110,7 +109,7 @@ class TurnTest extends TestCase
     private function testTransportOkMulti($transport, $ssl)
     {
         $turn = $this->createTurn($transport, $ssl);
-        await($turn->connect());
+        $turn->connect();
 
         $this->assertNotNull($turn->getLocalHost());
         $this->assertNotNull($turn->getRelayedAddress());
@@ -121,7 +120,16 @@ class TurnTest extends TestCase
         }
 
         delay(.1);
-        $this->assertEquals(array_map(fn($i) => "ping$i", range(1, 10)), $this->receiver->getData());
+
+        // Relayed data is UDP, so nothing orders echoes coming back from two different peers.
+        // The previous implementation queued every send behind the last one's round trip,
+        // which paced them enough to arrive in order; sends now block only on the channel
+        // bind for their own peer, so only the set of replies is meaningful.
+        $received = $this->receiver->getData();
+        sort($received);
+        $expected = array_map(fn($i) => "ping$i", range(1, 10));
+        sort($expected);
+        $this->assertEquals($expected, $received);
 
         $turn->delete();
     }
@@ -133,13 +141,13 @@ class TurnTest extends TestCase
         async(function () use ($turn) {
             delay(1);
             $turn->delete();
-        })();
+        });
 
         $this->expectException(TransactionExceptionInterface::class);
         // The reason phrase is advisory and server-dependent — coturn sends none — so the
         // assertion is on the 401 error code, which is what the protocol actually guarantees.
         $this->expectExceptionMessageMatches('/^Failed to request with retry: STUN transaction failed \(401\b/');
-        await($turn->connect());
+        $turn->connect();
     }
 
     private function createTurn(string $transport, bool $ssl, bool $wrongPass = false): Turn

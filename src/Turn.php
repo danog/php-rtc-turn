@@ -13,7 +13,6 @@ namespace Webrtc\TURN;
 
 use Psr\Log\LoggerInterface;
 use Random\RandomException;
-use React\Promise\PromiseInterface;
 use Throwable;
 use Webrtc\ICE\RTCIceCandidate;
 use Webrtc\STUN\Message\MessageInterface;
@@ -30,15 +29,12 @@ class Turn implements TurnInterface
     }
 
     /**
-     * Initiates a TURN connection and returns a PromiseInterface.
+     * Initiates a TURN connection and allocates a relay.
      *
-     * This method establishes a connection with a TURN server and allocates resources.
-     * It uses promises to handle the asynchronous nature of the connection process.
-     *
-     * @return PromiseInterface A promise that resolves to the connection details or rejects with an error.
+     * @return array{string, int}|null The relayed address the server allocated.
      * @throws RandomException
      */
-    public function connect(): PromiseInterface
+    public function connect(): ?array
     {
         return $this->connectionProtocol->connect();
     }
@@ -191,9 +187,9 @@ class Turn implements TurnInterface
      * @param ?string $address
      * @param ?string $integrity_key
      * @param int $retransmissions
-     * @return PromiseInterface
+     * @return array{MessageInterface, string|null} The response and where it came from.
      */
-    public function request(MessageInterface $message, ?string $address, ?string $integrity_key, int $retransmissions = 0): PromiseInterface
+    public function request(MessageInterface $message, ?string $address, ?string $integrity_key, int $retransmissions = 0): array
     {
         return $this->connectionProtocol->request($message, $address, $integrity_key, $retransmissions);
     }

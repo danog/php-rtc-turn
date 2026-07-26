@@ -32,7 +32,7 @@ abstract class TCPConnection extends BaseProtocol
     /**
      * @var array<string, string> Map of socket events to handler methods
      */
-    private const array FORWARD_EVENT_METHOD_MAP = [
+    private const FORWARD_EVENT_METHOD_MAP = [
         "data" => "onTCPReceived",
         "end" => "onEnded",
         "error" => "onError",

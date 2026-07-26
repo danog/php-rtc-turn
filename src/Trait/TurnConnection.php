@@ -36,8 +36,8 @@ use Webrtc\STUN\Message\MessageInterface;
  */
 trait TurnConnection
 {
-    private const int UDP_TRANSPORT = 0x11000000;
-    private const int TCP_TRANSPORT = 0x06000000;
+    private const UDP_TRANSPORT = 0x11000000;
+    private const TCP_TRANSPORT = 0x06000000;
 
     /**
      * @var int The lifetime of the connection in seconds.

@@ -1,7 +1,7 @@
 {
-    "name": "quasarstream/turn",
+    "name": "danog/php-rtc-turn",
     "type": "library",
-    "description": "A PHP implementation of TURN (Traversal Using Relays around NAT) ",
+    "description": "A PHP implementation of TURN (Traversal Using Relays around NAT). Fork with FFI made optional and a pure-PHP DTLS/SRTP stack, maintained for MadelineProto.",
     "keywords": [
         "webrtc",
         "turn",
@@ -49,5 +49,8 @@
         }
     },
     "minimum-stability": "dev",
-    "prefer-stable": true
+    "prefer-stable": true,
+    "replace": {
+        "quasarstream/turn": "self.version"
+    }
 }

@@ -54,7 +54,10 @@ abstract class TCPConnection extends BaseProtocol
                         continue;
                     }
 
-                    $this->onTCPReceived($chunk);
+                    // Dispatch in its own fiber: handling data can block on a transaction of
+                    // its own, and doing that inline would stop this loop from reading the
+                    // reply it is waiting for.
+                    async(fn () => $this->onTCPReceived($chunk))->ignore();
                 }
 
                 $this->onEnded();

@@ -36,7 +36,6 @@
         "danog/php-rtc-stun": "^1.0"
     },
     "require-dev": {
-        "phpunit/php-code-coverage": "11.0.x-dev",
         "phpunit/phpunit": "^11.3",
         "mockery/mockery": "^1.6"
     },

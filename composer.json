@@ -1,7 +1,7 @@
 {
     "name": "danog/php-rtc-turn",
     "type": "library",
-    "description": "A PHP implementation of TURN (Traversal Using Relays around NAT). Fork with FFI made optional and a pure-PHP DTLS/SRTP stack, maintained for MadelineProto.",
+    "description": "TURN relay transport for PHP WebRTC, ported to Amp v3 TCP, UDP, and fibers. MadelineProto's PHP 8.2+ fork supports the modular danog/php-rtc stack.",
     "keywords": [
         "webrtc",
         "turn",

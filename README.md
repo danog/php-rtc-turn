@@ -1,9 +1,15 @@
 # TURN Library for PHP
 
-[![PHP Version](https://img.shields.io/badge/php-%3E%3D8.4-blue.svg)](https://php.net/)
+[![PHP Version](https://img.shields.io/badge/php-%3E%3D8.2-blue.svg)](https://php.net/)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 A PHP implementation of TURN (Traversal Using Relays around NAT) to facilitate NAT traversal for WebRTC by relaying media through a TURN server when peer-to-peer fails.
+
+## About this fork
+
+This is the `danog/php-rtc-turn` fork used by MadelineProto. It targets PHP 8.2+ and replaces ReactPHP with Amp v3 TCP/UDP sockets, blocking fiber APIs, and per-peer channel-bind coordination. Receive handlers run independently so nested TURN/STUN transactions cannot block their own replies.
+
+The forked stack keeps the upstream `quasarstream/*` dependency constraints for compatibility. Each `danog/php-rtc-*` package replaces its upstream counterpart, so consumers select the complete maintained stack by requiring the corresponding danog packages together.
 
 ##  Features
 
@@ -14,7 +20,7 @@ A PHP implementation of TURN (Traversal Using Relays around NAT) to facilitate N
 
 ## Requirements
 
-- PHP ≥ 8.4
+- PHP ≥ 8.2
 
 ## Documentation
 

@@ -9,7 +9,7 @@ A PHP implementation of TURN (Traversal Using Relays around NAT) to facilitate N
 
 This is the `danog/php-rtc-turn` fork used by MadelineProto. It targets PHP 8.2+ and replaces ReactPHP with Amp v3 TCP/UDP sockets, blocking fiber APIs, and per-peer channel-bind coordination. Receive handlers run independently so nested TURN/STUN transactions cannot block their own replies.
 
-The forked stack keeps the upstream `quasarstream/*` dependency constraints for compatibility. Each `danog/php-rtc-*` package replaces its upstream counterpart, so consumers select the complete maintained stack by requiring the corresponding danog packages together.
+All internal Composer dependencies use their `danog/php-rtc-*` package names directly, so installing a component selects the maintained danog packages throughout the dependency graph.
 
 ##  Features
 

@@ -28,9 +28,9 @@
         "amphp/amp": "^3.1",
         "amphp/socket": "^2.3",
         "psr/log": "^3.0",
-        "quasarstream/exception": "^1.0",
-        "quasarstream/mixin": "^1.0",
-        "quasarstream/stun": "^1.0"
+        "danog/php-rtc-exception": "^1.0",
+        "danog/php-rtc-mixin": "^1.0",
+        "danog/php-rtc-stun": "^1.0"
     },
     "require-dev": {
         "phpunit/php-code-coverage": "11.0.x-dev",
@@ -48,8 +48,5 @@
         }
     },
     "minimum-stability": "dev",
-    "prefer-stable": true,
-    "replace": {
-        "quasarstream/turn": "self.version"
-    }
+    "prefer-stable": true
 }

@@ -36,7 +36,7 @@
         "danog/php-rtc-stun": "^1.1.1"
     },
     "require-dev": {
-        "phpunit/phpunit": "^11.3",
+        "phpunit/phpunit": "^13.0",
         "mockery/mockery": "^1.6"
     },
     "autoload": {
@@ -49,6 +49,6 @@
             "Tests\\Webrtc\\TURN\\": "tests"
         }
     },
-    "minimum-stability": "dev",
+    "minimum-stability": "stable",
     "prefer-stable": true
 }

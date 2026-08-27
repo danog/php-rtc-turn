@@ -11,9 +11,11 @@
 
 namespace Webrtc\TURN;
 
+use Amp\Socket\InternetAddress;
 use Psr\Log\LoggerInterface;
 use Random\RandomException;
 use Throwable;
+use Webrtc\Exception\InvalidArgumentException;
 use Webrtc\ICE\RTCIceCandidate;
 use Webrtc\STUN\Message\MessageInterface;
 use Webrtc\STUN\ReceiverInterface;
@@ -31,10 +33,10 @@ class Turn implements TurnInterface
     /**
      * Initiates a TURN connection and allocates a relay.
      *
-     * @return array{string, int}|null The relayed address the server allocated.
+     * @return InternetAddress|null The relayed address the server allocated.
      * @throws RandomException
      */
-    public function connect(): ?array
+    public function connect(): ?InternetAddress
     {
         return $this->connectionProtocol->connect();
     }
@@ -59,11 +61,15 @@ class Turn implements TurnInterface
      * This will bind a TURN channel as necessary.
      *
      * @param string $data The data to send.
-     * @param string|null $remoteAddress The remote address as string.
+     * @param InternetAddress|null $remoteAddress The remote address.
      * @throws RandomException
      */
-    public function send(string $data, ?string $remoteAddress = null): void
+    public function send(string $data, ?InternetAddress $remoteAddress = null): void
     {
+        if ($remoteAddress === null) {
+            throw new InvalidArgumentException('A remote address is required for TURN data.');
+        }
+
         $this->connectionProtocol->sendData($data, $remoteAddress);
     }
 
@@ -114,9 +120,9 @@ class Turn implements TurnInterface
     /**
      * Get the local address.
      *
-     * @return string The local address.
+     * @return InternetAddress The local address.
      */
-    public function getLocalAddress(): string
+    public function getLocalAddress(): InternetAddress
     {
         return $this->connectionProtocol->getLocalAddress();
     }
@@ -144,9 +150,9 @@ class Turn implements TurnInterface
     /**
      * Get the remote address.
      *
-     * @return ?string The remote address.
+     * @return InternetAddress|null The remote address.
      */
-    public function getRemoteAddress(): ?string
+    public function getRemoteAddress(): ?InternetAddress
     {
         return $this->connectionProtocol->getRemoteAddress();
     }
@@ -172,10 +178,10 @@ class Turn implements TurnInterface
      * Send a STUN message.
      *
      * @param MessageInterface $message
-     * @param ?string $address
+     * @param InternetAddress|null $address
      * @return void
      */
-    public function sendMessage(MessageInterface $message, ?string $address): void
+    public function sendMessage(MessageInterface $message, ?InternetAddress $address): void
     {
         $this->connectionProtocol->sendMessage($message, $address);
     }
@@ -184,12 +190,12 @@ class Turn implements TurnInterface
      * Execute a STUN transaction and return the response.
      *
      * @param MessageInterface $message
-     * @param ?string $address
+     * @param InternetAddress|null $address
      * @param ?string $integrity_key
      * @param int $retransmissions
-     * @return array{MessageInterface, string|null} The response and where it came from.
+     * @return array{MessageInterface, InternetAddress|null} The response and where it came from.
      */
-    public function request(MessageInterface $message, ?string $address, ?string $integrity_key, int $retransmissions = 0): array
+    public function request(MessageInterface $message, ?InternetAddress $address, ?string $integrity_key, int $retransmissions = 0): array
     {
         return $this->connectionProtocol->request($message, $address, $integrity_key, $retransmissions);
     }
@@ -207,9 +213,9 @@ class Turn implements TurnInterface
     /**
      * Gets relayed address
      *
-     * @return ?array
+     * @return InternetAddress|null
      */
-    function getRelayedAddress(): ?array
+    function getRelayedAddress(): ?InternetAddress
     {
         return $this->connectionProtocol->getRelayedAddress();
     }
@@ -221,17 +227,17 @@ class Turn implements TurnInterface
      */
     function getRelayedHost(): string
     {
-        return $this->connectionProtocol->getRelayedAddress()[0];
+        return $this->connectionProtocol->getRelayedAddress()->getAddress();
     }
 
     /**
      * Gets relayed port
      *
-     * @return string
+     * @return int
      */
-    function getRelayedPort(): string
+    function getRelayedPort(): int
     {
-        return $this->connectionProtocol->getRelayedAddress()[1];
+        return $this->connectionProtocol->getRelayedAddress()->getPort();
     }
 
     /**

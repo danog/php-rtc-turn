@@ -11,6 +11,7 @@
 
 namespace Webrtc\TURN;
 
+use Amp\Socket\InternetAddress;
 use Psr\Log\LoggerInterface;
 use Ramsey\Uuid\Uuid;
 use Amp\Socket\UdpSocket;
@@ -43,7 +44,7 @@ class TurnUdpConnection extends Datagram implements TurnConnectionInterface
                                 private readonly ?LoggerInterface            $logger,
                                 UdpSocket                                   $socket)
     {
-        $this->remoteAddress = implode(":", $this->configuration->getTurnServer());
+        $this->remoteAddress = new InternetAddress(...$this->configuration->getTurnServer());
         $this->id = Uuid::uuid4()->toString();
         parent::__construct($socket);
     }

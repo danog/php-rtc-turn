@@ -2,6 +2,7 @@
 
 namespace Tests\Webrtc\TURN;
 
+use Amp\Socket\InternetAddress;
 use Webrtc\STUN\IceConnectionProtocolInterface;
 use Webrtc\STUN\Message\MessageInterface;
 use Webrtc\STUN\ReceiverInterface;
@@ -16,7 +17,7 @@ class Receiver implements ReceiverInterface
         $this->data[] = $data;
     }
 
-    public function onRequestReceived(MessageInterface $message, string $address, IceConnectionProtocolInterface $protocol, string $data): void
+    public function onRequestReceived(MessageInterface $message, InternetAddress $address, IceConnectionProtocolInterface $protocol, string $data): void
     {
         $this->messages[] = $message;
     }

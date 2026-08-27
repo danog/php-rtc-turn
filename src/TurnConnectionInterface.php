@@ -11,6 +11,7 @@
 
 namespace Webrtc\TURN;
 
+use Amp\Socket\InternetAddress;
 use Psr\Log\LoggerInterface;
 use Random\RandomException;
 use Webrtc\STUN\IceConnectionProtocolInterface;
@@ -18,12 +19,12 @@ use Webrtc\STUN\ReceiverInterface;
 
 interface TurnConnectionInterface extends IceConnectionProtocolInterface
 {
-    public function connect(): ?array;
+    public function connect(): ?InternetAddress;
 
     public function delete(): void;
 
-    public function getRelayedAddress(): ?array;
+    public function getRelayedAddress(): ?InternetAddress;
 
-    public function sendData(string $data, string $addr): void;
+    public function sendData(string $data, InternetAddress $address): void;
 
 }

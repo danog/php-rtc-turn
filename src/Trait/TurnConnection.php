@@ -11,6 +11,7 @@
 
 namespace Webrtc\TURN\Trait;
 
+use Amp\Socket\InternetAddress;
 use Exception;
 use Random\RandomException;
 use Amp\DeferredFuture;
@@ -48,9 +49,9 @@ trait TurnConnection
     private ?string $integrityKey = null;
 
     /**
-     * @var ?array The relayed address of the connection[Host, Port].
+     * @var InternetAddress|null The relayed address of the connection.
      */
-    private ?array $relayedAddress = null;
+    private ?InternetAddress $relayedAddress = null;
 
     /**
      * @var string The nonce used for authentication.
@@ -76,13 +77,13 @@ trait TurnConnection
     private array $peerBinding = [];
 
     /**
-     * @var array An associative array to map peers to channels.
+     * @var array<string, int> An associative array to map peers to channels.
      * Key: peer address, Value: channel number.
      */
     private array $peerToChannel = [];
 
     /**
-     * @var array An associative array to map channels to peers.
+     * @var array<int, InternetAddress> An associative array to map channels to peers.
      * Key: channel number, Value: peer address.
      */
     private array $channelToPeer = [];
@@ -98,7 +99,7 @@ trait TurnConnection
     private int $channelRefreshTime = 500;
 
     /**
-     * @var array An associative array to store channel refresh timestamps.
+     * @var array<int, int> An associative array to store channel refresh timestamps.
      * Key: channel number, Value: timestamp (seconds since epoch).
      */
     private array $channelRefreshAt = [];
@@ -134,15 +135,15 @@ trait TurnConnection
      * Binds a channel to a peer address.
      *
      * @param int $channelNumber The channel number.
-     * @param string $address The peer address.
+     * @param InternetAddress $address The peer address.
      * @return void Returns once the channel is bound.
      * @throws RandomException
      */
-    private function channelBind(int $channelNumber, string $address): void
+    private function channelBind(int $channelNumber, InternetAddress $address): void
     {
         $messageAttr = [
             MessageAttribute::CHANNEL_NUMBER->name => $channelNumber,
-            MessageAttribute::XOR_PEER_ADDRESS->name => explode(":", $address)
+            MessageAttribute::XOR_PEER_ADDRESS->name => $address
         ];
         $message = Message::new(MessageClass::REQUEST, MessageMethod::CHANNEL_BIND, $messageAttr);
 
@@ -154,10 +155,10 @@ trait TurnConnection
      *
      * This method establishes a connection with a TURN server and allocates resources.
      *
-     * @return array{string, int}|null The relayed address the server allocated.
+     * @return InternetAddress|null The relayed address the server allocated.
      * @throws RandomException
      */
-    public function connect(): ?array
+    public function connect(): ?InternetAddress
     {
         $messageAttr = [
             MessageAttribute::LIFETIME->name => $this->lifetime,
@@ -189,9 +190,9 @@ trait TurnConnection
     /**
      * Gets relayed address
      *
-     * @return ?array
+     * @return InternetAddress|null
      */
-    public function getRelayedAddress(): ?array
+    public function getRelayedAddress(): ?InternetAddress
     {
         return $this->relayedAddress;
     }
@@ -250,11 +251,11 @@ trait TurnConnection
      * It then calls appropriate methods for further handling depending on the message class and transaction ID.
      *
      * @param string $data The received data.
-     * @param string|null $peerAddress The address of the peer who sent the message.
+     * @param InternetAddress $peerAddress The address of the peer who sent the message.
      * @return void
      * @throws RandomException
      */
-    public function onReceived(string $data, ?string $peerAddress): void
+    public function onReceived(string $data, InternetAddress $peerAddress): void
     {
         if (strlen($data) >= 4 && $this->isChannelData($data)) {
             [$channel, $length] = array_values(unpack("nChannel/nLength", substr($data, 0, 4)));
@@ -309,11 +310,11 @@ trait TurnConnection
      * It performs actions like updating internal state, notifying the receiver, or handling errors.
      *
      * @param MessageInterface $message The decoded message object.
-     * @param string $address The address of the peer who sent the message.
+     * @param InternetAddress $address The address of the peer who sent the message.
      * @param string $data The raw received data (might be used for additional processing).
      * @return void
      */
-    private function handleMessage(MessageInterface $message, string $address, string $data): void
+    private function handleMessage(MessageInterface $message, InternetAddress $address, string $data): void
     {
 
         $this?->logger->info("A new TURN message has been received", ["Message" => $message->humanReadable(), "FromAddress" => $address]);
@@ -411,7 +412,7 @@ trait TurnConnection
      * This method sends the given message and handles potential authentication failures. If an authentication error occurs, it updates the long-term credentials and retries the request with the updated credentials.
      *
      * @param MessageInterface $message The message to be sent.
-     * @return array{MessageInterface, string|null} The response and where it came from.
+     * @return array{MessageInterface, InternetAddress|null} The response and where it came from.
      * @throws TransactionExceptionInterface If the request failed for a reason retrying cannot fix.
      */
     private function requestWithRetry(MessageInterface $message): array
@@ -430,7 +431,7 @@ trait TurnConnection
      *
      * @param TransactionExceptionInterface $error
      * @param MessageInterface $message
-     * @return array{MessageInterface, string|null} The response to the retried request.
+     * @return array{MessageInterface, InternetAddress|null} The response to the retried request.
      * @throws RandomException
      */
     private function handleRetryRequestError(TransactionExceptionInterface $error, MessageInterface $message): array
@@ -501,14 +502,15 @@ trait TurnConnection
      * before it expires. Both happen inline here: the fiber simply waits for the bind.
      *
      * @param string $data The data to be sent.
-     * @param string $addr The address of the recipient.
+     * @param InternetAddress $address The address of the recipient.
      * @return void
      * @throws RandomException
      */
-    public function sendData(string $data, string $addr): void
+    public function sendData(string $data, InternetAddress $address): void
     {
-        $this->ensureChannel($addr);
-        $this->sendPacket($this->peerToChannel[$addr], $data);
+        $addressKey = $address->toString();
+        $this->ensureChannel($address, $addressKey);
+        $this->sendPacket($this->peerToChannel[$addressKey], $data);
     }
 
     /**
@@ -516,16 +518,16 @@ trait TurnConnection
      *
      * @throws RandomException
      */
-    private function ensureChannel(string $addr): void
+    private function ensureChannel(InternetAddress $address, string $addressKey): void
     {
         // Another fiber may already be binding this peer; take its result rather than
         // allocating a second channel for the same address.
-        while (isset($this->peerBinding[$addr])) {
-            $this->peerBinding[$addr]->await();
+        while (isset($this->peerBinding[$addressKey])) {
+            $this->peerBinding[$addressKey]->await();
         }
 
         $now = time();
-        $channel = $this->peerToChannel[$addr] ?? null;
+        $channel = $this->peerToChannel[$addressKey] ?? null;
 
         if ($channel !== null && $now <= ($this->channelRefreshAt[$channel] ?? 0)) {
             return;
@@ -533,19 +535,19 @@ trait TurnConnection
 
         $channel ??= $this->channelNumber++;
         $deferred = new DeferredFuture();
-        $this->peerBinding[$addr] = $deferred->getFuture();
+        $this->peerBinding[$addressKey] = $deferred->getFuture();
 
         try {
-            $this->channelBind($channel, $addr);
+            $this->channelBind($channel, $address);
 
             $this->channelRefreshAt[$channel] = $now + $this->channelRefreshTime;
-            $this->channelToPeer[$channel] = $addr;
-            $this->peerToChannel[$addr] = $channel;
+            $this->channelToPeer[$channel] = $address;
+            $this->peerToChannel[$addressKey] = $channel;
 
-            unset($this->peerBinding[$addr]);
+            unset($this->peerBinding[$addressKey]);
             $deferred->complete();
         } catch (\Throwable $e) {
-            unset($this->peerBinding[$addr]);
+            unset($this->peerBinding[$addressKey]);
             $deferred->error($e);
 
             throw $e;

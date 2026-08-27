@@ -2,6 +2,7 @@
 
 namespace Tests\Webrtc\TURN;
 
+use Amp\Socket\InternetAddress;
 use PHPUnit\Framework\Attributes\CoversClass;
 use Webrtc\TURN\TurnUdpConnection;
 use PHPUnit\Framework\TestCase;
@@ -37,7 +38,7 @@ class TurnUDPConnectionTest extends TestCase
 
     public function testReceiveJunk()
     {
-        $this->protocol->OnReceived(str_repeat("\x00", 20), "127.0.0.1:4321");
+        $this->protocol->OnReceived(str_repeat("\x00", 20), new InternetAddress("127.0.0.1", 4321));
         $this->assertEmpty($this->receiver->getData());
         $this->assertEmpty($this->receiver->getMessages());
     }

@@ -11,11 +11,11 @@
 
 namespace Webrtc\TURN;
 
+use Amp\Socket\InternetAddress;
 use Amp\Socket\Socket;
 use Throwable;
 use Webrtc\STUN\BaseProtocol;
 use function Amp\async;
-use function parse_url;
 
 /**
  * Abstract TCP Connection Class
@@ -72,10 +72,10 @@ abstract class TCPConnection extends BaseProtocol
      * Send data over the TCP connection
      *
      * @param string $data The data to send
-     * @param string|null $remoteAddress Unused parameter (maintained for interface compatibility)
+     * @param InternetAddress|null $remoteAddress Unused parameter (maintained for interface compatibility)
      * @return void
      */
-    public function send(string $data, ?string $remoteAddress = null): void
+    public function send(string $data, ?InternetAddress $remoteAddress = null): void
     {
         $this->socket->write($this->padded($data));
     }
@@ -123,11 +123,11 @@ abstract class TCPConnection extends BaseProtocol
     /**
      * Get the local connection address
      *
-     * @return string The local address in "host:port" format
+     * @return InternetAddress The local address
      */
-    public function getLocalAddress(): string
+    public function getLocalAddress(): InternetAddress
     {
-        return (string) $this->socket->getLocalAddress();
+        return $this->socket->getLocalAddress();
     }
 
     /**
@@ -137,7 +137,7 @@ abstract class TCPConnection extends BaseProtocol
      */
     public function getLocalHost(): string
     {
-        return parse_url($this->getLocalAddress(), PHP_URL_HOST);
+        return $this->getLocalAddress()->getAddress();
     }
 
     /**
@@ -147,19 +147,17 @@ abstract class TCPConnection extends BaseProtocol
      */
     public function getLocalPort(): int
     {
-        return parse_url($this->getLocalAddress(), PHP_URL_PORT);
+        return $this->getLocalAddress()->getPort();
     }
 
     /**
      * Get the remote connection address
      *
-     * @return string|null The remote address in "host:port" format or null if not connected
+     * @return InternetAddress|null The remote address or null if not connected
      */
-    public function getRemoteAddress(): ?string
+    public function getRemoteAddress(): ?InternetAddress
     {
-        $address = $this->socket->getRemoteAddress();
-
-        return $address === null ? null : (string) $address;
+        return $this->socket->getRemoteAddress();
     }
 
     /**

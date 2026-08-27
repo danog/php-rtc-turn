@@ -2,6 +2,7 @@
 
 namespace Tests\Webrtc\TURN;
 
+use Amp\Socket\InternetAddress;
 use Ramsey\Uuid\Uuid;
 use Amp\Socket\UdpSocket;
 use Webrtc\Exception\RuntimeException;
@@ -15,7 +16,7 @@ class EchoServer extends Datagram
         parent::__construct($socket);
     }
 
-    protected function onReceived(string $data, string $peerAddress): void
+    protected function onReceived(string $data, InternetAddress $peerAddress): void
     {
         $this->send($data, $peerAddress);
     }

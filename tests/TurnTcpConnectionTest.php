@@ -4,6 +4,7 @@ namespace Tests\Webrtc\TURN;
 
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\UsesClass;
+use Webrtc\AVCodec\Filter\Graph;
 use Webrtc\STUN\Message\Message;
 use Webrtc\STUN\Message\MessageAttributeCollection;
 use Webrtc\STUN\Message\MessageAttributeEncoder;
@@ -17,6 +18,11 @@ use PHPUnit\Framework\TestCase;
 #[UsesClass(MessageAttributeEncoder::class)]
 #[UsesClass(Transaction::class)]
 #[UsesClass(Utils::class)]
+#[UsesClass(Graph::class)]
+#[UsesClass(\Webrtc\STUN\Enum\MessageAttribute::class)]
+#[UsesClass(\Webrtc\STUN\Exception\TransactionException::class)]
+#[UsesClass(\Webrtc\STUN\Exception\TransactionFailedException::class)]
+#[UsesClass(\Webrtc\STUN\Message\MessageIntegrity::class)]
 #[CoversClass(TurnTcpConnection::class)]
 class TurnTcpConnectionTest extends TestCase
 {

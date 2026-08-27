@@ -33,6 +33,7 @@ use function Amp\delay;
 #[UsesClass(MessageIntegrity::class)]
 #[UsesClass(Transaction::class)]
 #[UsesClass(Utils::class)]
+#[UsesClass(\Webrtc\STUN\Enum\MessageAttribute::class)]
 #[CoversClass(Turn::class)]
 class TurnTest extends TestCase
 {

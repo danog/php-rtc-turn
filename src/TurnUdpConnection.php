@@ -27,7 +27,7 @@ use function Amp\Socket\bindUdpSocket;
  * Class TurnUDPConnection
  * Protocol for handling TURN over UDP.
  */
-class TurnUdpConnection extends Datagram implements TurnConnectionInterface
+final class TurnUdpConnection extends Datagram implements TurnConnectionInterface
 {
     use Request, TurnConnection;
 
@@ -44,14 +44,33 @@ class TurnUdpConnection extends Datagram implements TurnConnectionInterface
                                 private readonly ?LoggerInterface            $logger,
                                 UdpSocket                                   $socket)
     {
-        $this->remoteAddress = new InternetAddress(...$this->configuration->getTurnServer());
+        $turnServer = $this->configuration->getTurnServer();
+        if ($turnServer === null || !isset($turnServer[0], $turnServer[1])) {
+            throw new RuntimeException('No TURN server is configured');
+        }
+        $port = (int) $turnServer[1];
+        if ($port < 0 || $port > 65535) {
+            throw new RuntimeException('Invalid TURN server port');
+        }
+        $this->remoteAddress = new InternetAddress((string) $turnServer[0], $port);
         $this->id = Uuid::uuid4()->toString();
         parent::__construct($socket);
     }
 
     /**
+     * @param string $transactionId
+     * @return void
+     */
+    #[\Override]
+    public function removeTransaction(string $transactionId): void
+    {
+        unset($this->transactionIds[$transactionId]);
+    }
+
+    /**
      * @return string
      */
+    #[\Override]
     public function getId(): string
     {
         return $this->id;
@@ -73,7 +92,7 @@ class TurnUdpConnection extends Datagram implements TurnConnectionInterface
             $socket = bindUdpSocket('0.0.0.0:0');
             return new static($configuration, $receiver, $logger, $socket);
         } catch (Throwable $e) {
-            throw new RuntimeException(sprintf("Could not bind to %s", $e->getMessage()), $e->getCode(), $e);
+            throw new RuntimeException(sprintf("Could not bind to %s", $e->getMessage()), (int) $e->getCode(), $e);
         }
     }
 }

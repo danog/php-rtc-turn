@@ -29,7 +29,7 @@ use Webrtc\TURN\Trait\TurnConnection;
  * Class TurnTcpConnection
  * Protocol for handling TURN over TCP.
  */
-class TurnTcpConnection extends TCPConnection implements TurnConnectionInterface
+final class TurnTcpConnection extends TCPConnection implements TurnConnectionInterface
 {
     use Request, TurnConnection;
 
@@ -52,8 +52,19 @@ class TurnTcpConnection extends TCPConnection implements TurnConnectionInterface
     }
 
     /**
+     * @param string $transactionId
+     * @return void
+     */
+    #[\Override]
+    public function removeTransaction(string $transactionId): void
+    {
+        unset($this->transactionIds[$transactionId]);
+    }
+
+    /**
      * @return string
      */
+    #[\Override]
     public function getId(): string
     {
         return $this->id;
@@ -66,12 +77,17 @@ class TurnTcpConnection extends TCPConnection implements TurnConnectionInterface
      * @return void
      * @throws RandomException
      */
+    #[\Override]
     public function onTCPReceived(string $data): void
     {
         $this->buffer .= $data;
 
         while (strlen($this->buffer) >= 4) {
-            [, $length] = array_values(unpack("nChannel/nLength", substr($this->buffer, 0, 4)));
+            $unpacked = unpack("nChannel/nLength", substr($this->buffer, 0, 4));
+            if ($unpacked === false) {
+                break;
+            }
+            $length = (int) $unpacked['Length'];
             $length += Utils::paddingLength($length);
 
             if ($this->isChannelData($this->buffer)) {
@@ -85,6 +101,10 @@ class TurnTcpConnection extends TCPConnection implements TurnConnectionInterface
             }
 
             $address = $this->getRemoteAddress();
+            if ($address === null) {
+                break;
+            }
+
             $data = substr($this->buffer, 0, $fullLength);
             $this->onReceived($data, $address);
             $this->buffer = substr($this->buffer, $fullLength);
@@ -97,6 +117,7 @@ class TurnTcpConnection extends TCPConnection implements TurnConnectionInterface
      * @param string $data
      * @return string
      */
+    #[\Override]
     protected function padded(string $data): string
     {
         $padLen = Utils::paddingLength(strlen($data));
@@ -113,11 +134,15 @@ class TurnTcpConnection extends TCPConnection implements TurnConnectionInterface
      */
     public static function create(TurnConfigurationInterface $configuration, ReceiverInterface $receiver, ?LoggerInterface $logger = null): self
     {
-        $address = implode(":", $configuration->getTurnServer());
+        $turnServer = $configuration->getTurnServer();
+        if ($turnServer === null || !isset($turnServer[0], $turnServer[1])) {
+            throw new RuntimeException('No TURN server is configured');
+        }
+        $address = implode(":", array_map(static fn (mixed $part): string => (string) $part, $turnServer));
 
         try {
             $context = (new ConnectContext())->withTlsContext(
-                (new ClientTlsContext($configuration->getTurnServer()[0]))->withoutPeerVerification()
+                (new ClientTlsContext((string) $turnServer[0]))->withoutPeerVerification()
             );
 
             $socket = connect($address, $context);
@@ -129,7 +154,7 @@ class TurnTcpConnection extends TCPConnection implements TurnConnectionInterface
 
             return new static($configuration, $receiver, $logger, $socket);
         } catch (Throwable $e) {
-            throw new RuntimeException(sprintf("Could not connect to %s - %s", $address, $e->getMessage()), $e->getCode(), $e);
+            throw new RuntimeException(sprintf("Could not connect to %s - %s", $address, $e->getMessage()), (int) $e->getCode(), $e);
         }
     }
 }

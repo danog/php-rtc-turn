@@ -51,5 +51,8 @@ jobs:
           ps aux | grep turnserver
           netstat -tulnp | grep -E '3478|5349'
 
+      - name: Run Psalm
+        run: vendor/bin/psalm --no-progress
+
       - name: Run PHPUnit tests
         run: vendor/bin/phpunit

@@ -34,10 +34,17 @@ abstract class TCPConnection extends BaseProtocol
      *
      * @param Socket $socket The established TCP socket connection
      */
+/**
+     * TCP connection constructor.
+     *
+     * @param Socket $socket The established TCP socket connection
+     */
     public function __construct(protected Socket $socket)
     {
         $this->listen();
     }
+
+    protected ?InternetAddress $remoteAddress = null;
 
     /**
      * Deliver incoming data to onTCPReceived() until the peer closes.
@@ -75,6 +82,7 @@ abstract class TCPConnection extends BaseProtocol
      * @param InternetAddress|null $remoteAddress Unused parameter (maintained for interface compatibility)
      * @return void
      */
+    #[\Override]
     public function send(string $data, ?InternetAddress $remoteAddress = null): void
     {
         $this->socket->write($this->padded($data));
@@ -85,6 +93,7 @@ abstract class TCPConnection extends BaseProtocol
      *
      * @return void
      */
+    #[\Override]
     public function close(): void
     {
         $this->socket->close();
@@ -95,6 +104,7 @@ abstract class TCPConnection extends BaseProtocol
      *
      * @return void
      */
+    #[\Override]
     public function end(): void
     {
         $this->socket->end();
@@ -105,6 +115,7 @@ abstract class TCPConnection extends BaseProtocol
      *
      * @return void
      */
+    #[\Override]
     public function resume(): void
     {
         $this->paused = false;
@@ -115,6 +126,7 @@ abstract class TCPConnection extends BaseProtocol
      *
      * @return void
      */
+    #[\Override]
     public function pause(): void
     {
         $this->paused = true;
@@ -125,9 +137,10 @@ abstract class TCPConnection extends BaseProtocol
      *
      * @return InternetAddress The local address
      */
+    #[\Override]
     public function getLocalAddress(): InternetAddress
     {
-        return $this->socket->getLocalAddress();
+        return InternetAddress::fromString($this->socket->getLocalAddress()->toString());
     }
 
     /**
@@ -135,6 +148,7 @@ abstract class TCPConnection extends BaseProtocol
      *
      * @return string The local hostname/IP address
      */
+    #[\Override]
     public function getLocalHost(): string
     {
         return $this->getLocalAddress()->getAddress();
@@ -145,6 +159,7 @@ abstract class TCPConnection extends BaseProtocol
      *
      * @return int The local port number
      */
+    #[\Override]
     public function getLocalPort(): int
     {
         return $this->getLocalAddress()->getPort();
@@ -155,9 +170,10 @@ abstract class TCPConnection extends BaseProtocol
      *
      * @return InternetAddress|null The remote address or null if not connected
      */
+    #[\Override]
     public function getRemoteAddress(): ?InternetAddress
     {
-        return $this->socket->getRemoteAddress();
+        return InternetAddress::fromString($this->socket->getRemoteAddress()->toString());
     }
 
     /**

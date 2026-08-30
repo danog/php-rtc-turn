@@ -56,7 +56,7 @@ trait TurnConnection
     /**
      * @var string The nonce used for authentication.
      */
-    private string $nonce;
+    private string $nonce = "";
 
     /**
      * @var ?string The realm for authentication (if provided by the server).
@@ -171,10 +171,13 @@ trait TurnConnection
         $timeToExpiry = null;
         if ($response instanceof Message) {
             $timeToExpiry = $response->attributes()->get(MessageAttribute::LIFETIME);
-            $this->relayedAddress = $response->attributes()->get(MessageAttribute::XOR_RELAYED_ADDRESS);
+            $relayedAddress = $response->attributes()->get(MessageAttribute::XOR_RELAYED_ADDRESS);
+            if ($relayedAddress instanceof InternetAddress) {
+                $this->relayedAddress = $relayedAddress;
+            }
         }
 
-        if ($timeToExpiry) {
+        if (is_int($timeToExpiry) && $timeToExpiry !== 0) {
             // Refresh well before the allocation expires, as RFC 8656 section 3.2 advises.
             $this->refreshPeriodicTimer = EventLoop::repeat(
                 $timeToExpiry * 5 / 6,
@@ -258,12 +261,22 @@ trait TurnConnection
     public function onReceived(string $data, InternetAddress $peerAddress): void
     {
         if (strlen($data) >= 4 && $this->isChannelData($data)) {
-            [$channel, $length] = array_values(unpack("nChannel/nLength", substr($data, 0, 4)));
+            $unpacked = unpack("nChannel/nLength", substr($data, 0, 4));
+            if ($unpacked === false) {
+                return;
+            }
+            $channel = (int) $unpacked['Channel'];
+            $length = (int) $unpacked['Length'];
             if (strlen($data) >= $length + 4 && $peerAddress = $this->channelToPeer[$channel] ?? null) {
                 $payload = substr($data, 4, $length);
                 if ($message = $this->decodeMessage($payload)) {
                     $this->handleMessage($message, $peerAddress, $data);
                 } else {
+// The STUN layer's candidate type (Webrtc\ICE\RTCIceCandidate in older
+                    // published releases of php-rtc-stun, Webrtc\STUN\IceCandidateInterface in the
+                    // current one) may not be resolvable in some environments, because the ICE
+                    // package (which contains the concrete RTCIceCandidate) is intentionally not a
+                    // dependency of the TURN package. All we need from it is the component id.
                     $this->receiver->onDataReceived($payload, $this->getCandidate()?->getComponentId() ?? 0);
                 }
             }
@@ -317,7 +330,7 @@ trait TurnConnection
     private function handleMessage(MessageInterface $message, InternetAddress $address, string $data): void
     {
 
-        $this?->logger->info("A new TURN message has been received", ["Message" => $message->humanReadable(), "FromAddress" => $address]);
+        $this->logger?->info("A new TURN message has been received", ["Message" => $message->humanReadable(), "FromAddress" => $address]);
 
         $messageClass = $message->getMessageClass();
         $transactionId = $message->getTransactionId();
@@ -357,7 +370,7 @@ trait TurnConnection
      */
     public function delete(): void
     {
-        if ($this->refreshPeriodicTimer) {
+        if ($this->refreshPeriodicTimer !== null) {
             EventLoop::cancel($this->refreshPeriodicTimer);
             $this->refreshPeriodicTimer = null;
         }
@@ -398,8 +411,7 @@ trait TurnConnection
             [$response] = $this->requestWithRetry($message);
 
             if ($response instanceof Message) {
-                $timeToExpiry = $response->attributes()->get(MessageAttribute::LIFETIME);
-                $this->logger?->info("TURN allocation refreshed", ["RelatedAddress" => $this->relayedAddress, "ExpiresInSeconds" => $timeToExpiry]);
+                $this->logger?->info("TURN allocation refreshed", ["RelatedAddress" => $this->relayedAddress, "ExpiresInSeconds" => $response->attributes()->get(MessageAttribute::LIFETIME)]);
             }
         } catch (Throwable $e) {
             $this->logger?->error("TURN allocation refreshed failed", ["RelatedAddress" => $this->relayedAddress, "ErrorMessage" => $e->getMessage()]);
@@ -421,7 +433,7 @@ trait TurnConnection
 
         try {
             return $this->request($message, null, $this->integrityKey);
-        } catch (TransactionExceptionInterface $e) {
+        } catch (TransactionException $e) {
             return $this->handleRetryRequestError($e, $message);
         }
     }
@@ -429,23 +441,40 @@ trait TurnConnection
     /**
      * If an authentication error occurs, it updates the long-term credentials and retries the request with the updated credentials.
      *
-     * @param TransactionExceptionInterface $error
+     * @param TransactionException $error
      * @param MessageInterface $message
      * @return array{MessageInterface, InternetAddress|null} The response to the retried request.
      * @throws RandomException
      */
-    private function handleRetryRequestError(TransactionExceptionInterface $error, MessageInterface $message): array
+    private function handleRetryRequestError(TransactionException $error, MessageInterface $message): array
     {
-        $errorCode = $error->getStunMessage()?->attributes()->get(MessageAttribute::ERROR_CODE)[0];
+        $stunMessage = $error->getStunMessage();
+        if ($stunMessage === null) {
+            $this->logger?->error("Error processing request: {$error->getMessage()}");
+
+            throw $error;
+        }
+
+        $errorCodeAttribute = $stunMessage->attributes()->get(MessageAttribute::ERROR_CODE);
+        $errorCode = null;
+        if (is_array($errorCodeAttribute) && isset($errorCodeAttribute[0]) && is_int($errorCodeAttribute[0])) {
+            $errorCode = $errorCodeAttribute[0];
+        }
 
         if ($this->configuration->getTurnUsername() !== null &&
             $this->configuration->getTurnPassword() !== null &&
-            $error->getStunMessage()?->attributes()->has(MessageAttribute::NONCE) &&
+            $stunMessage->attributes()->has(MessageAttribute::NONCE) &&
             ($errorCode === 401 || ($errorCode === 438 && $this->realm !== null))) {
             // Update long-term credentials
-            $this->nonce = $error->getStunMessage()->attributes()->get(MessageAttribute::NONCE);
+            $nonce = $stunMessage->attributes()->get(MessageAttribute::NONCE);
+            if (is_string($nonce)) {
+                $this->nonce = $nonce;
+            }
             if ($errorCode == 401) {
-                $this->realm = $error->getStunMessage()->attributes()->get(MessageAttribute::REALM);
+                $realm = $stunMessage->attributes()->get(MessageAttribute::REALM);
+                if (is_string($realm)) {
+                    $this->realm = $realm;
+                }
             }
 
             // Retry request with authentication
@@ -455,7 +484,7 @@ trait TurnConnection
 
             try {
                 return $this->request($message, null, $this->integrityKey);
-            } catch (TransactionExceptionInterface $e) {
+            } catch (TransactionException $e) {
                 $this->logger?->error("Failed to request with retry: {$e->getMessage()}");
 
                 throw new TransactionException("Failed to request with retry: {$e->getMessage()}", $e->getCode(), $e);
@@ -473,7 +502,7 @@ trait TurnConnection
      */
     private function addAuthenticatedAttributes(MessageInterface $message): void
     {
-        if ($this->integrityKey) {
+        if ($this->integrityKey !== null) {
             $messageAttr = [
                 MessageAttribute::USERNAME->name => $this->configuration->getTurnUsername(),
                 MessageAttribute::NONCE->name => $this->nonce,

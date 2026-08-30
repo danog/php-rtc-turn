@@ -16,7 +16,7 @@ use Psr\Log\LoggerInterface;
 use Random\RandomException;
 use Throwable;
 use Webrtc\Exception\InvalidArgumentException;
-use Webrtc\ICE\RTCIceCandidate;
+use Webrtc\STUN\IceCandidateInterface;
 use Webrtc\STUN\Message\MessageInterface;
 use Webrtc\STUN\ReceiverInterface;
 
@@ -24,7 +24,7 @@ use Webrtc\STUN\ReceiverInterface;
  * Class TurnTransport
  * Behaves like a Datagram transport but uses a TURN allocation.
  */
-class Turn implements TurnInterface
+final class Turn implements TurnInterface
 {
     public function __construct(private TurnConnectionInterface $connectionProtocol)
     {
@@ -36,6 +36,7 @@ class Turn implements TurnInterface
      * @return InternetAddress|null The relayed address the server allocated.
      * @throws RandomException
      */
+    #[\Override]
     public function connect(): ?InternetAddress
     {
         return $this->connectionProtocol->connect();
@@ -51,6 +52,7 @@ class Turn implements TurnInterface
      * @throws RandomException
      * @throws Throwable
      */
+    #[\Override]
     public function delete(): void
     {
         $this->connectionProtocol->delete();
@@ -64,6 +66,7 @@ class Turn implements TurnInterface
      * @param InternetAddress|null $remoteAddress The remote address.
      * @throws RandomException
      */
+    #[\Override]
     public function send(string $data, ?InternetAddress $remoteAddress = null): void
     {
         if ($remoteAddress === null) {
@@ -82,6 +85,7 @@ class Turn implements TurnInterface
      * @throws RandomException
      * @throws Throwable
      */
+    #[\Override]
     public function close(): void
     {
         $this->delete();
@@ -92,6 +96,7 @@ class Turn implements TurnInterface
      *
      * @return void
      */
+    #[\Override]
     public function end(): void
     {
         $this->connectionProtocol->end();
@@ -102,6 +107,7 @@ class Turn implements TurnInterface
      *
      * @return void
      */
+    #[\Override]
     public function resume(): void
     {
         $this->connectionProtocol->resume();
@@ -112,6 +118,7 @@ class Turn implements TurnInterface
      *
      * @return void
      */
+    #[\Override]
     public function pause(): void
     {
         $this->connectionProtocol->pause();
@@ -122,6 +129,7 @@ class Turn implements TurnInterface
      *
      * @return InternetAddress The local address.
      */
+    #[\Override]
     public function getLocalAddress(): InternetAddress
     {
         return $this->connectionProtocol->getLocalAddress();
@@ -132,6 +140,7 @@ class Turn implements TurnInterface
      *
      * @return string The local address.
      */
+    #[\Override]
     public function getLocalHost(): string
     {
         return $this->connectionProtocol->getLocalHost();
@@ -142,6 +151,7 @@ class Turn implements TurnInterface
      *
      * @return int The local address.
      */
+    #[\Override]
     public function getLocalPort(): int
     {
         return $this->connectionProtocol->getLocalPort();
@@ -152,24 +162,40 @@ class Turn implements TurnInterface
      *
      * @return InternetAddress|null The remote address.
      */
+    #[\Override]
     public function getRemoteAddress(): ?InternetAddress
     {
         return $this->connectionProtocol->getRemoteAddress();
     }
 
     /**
-     * @return RTCIceCandidate
+     * @return IceCandidateInterface|null
+     *
+     * The candidate type is negotiated with the STUN layer. When the TURN package is used
+     * standalone the published danog/php-rtc-stun still types these methods with the concrete
+     * Webrtc\ICE\RTCIceCandidate from the (intentionally, due to the circular dependency, not
+     * installed) ICE package; psalm cannot see either class here, so it cannot verify the
+     * signature against the STUN interface until a STUN release carrying IceCandidateInterface
+     * is published. See Webrtc\STUN\IceCandidateInterface in php-rtc-stun.
+     *
+     * USER OVERRIDE: do not suppress these issues, fix the root cause, instead.
      */
-    public function getCandidate(): RTCIceCandidate
+    #[\Override]
+    public function getCandidate(): ?IceCandidateInterface
     {
         return $this->connectionProtocol->getCandidate();
     }
 
     /**
-     * @param RTCIceCandidate $candidate
+     * @param IceCandidateInterface $candidate
      * @return void
+     *
+     * See getCandidate() for why the STUN-layer candidate signature cannot be verified here yet.
+     *
+     * USER OVERRIDE: do not suppress these issues, fix the root cause, instead.
      */
-    public function setCandidate(RTCIceCandidate $candidate): void
+    #[\Override]
+    public function setCandidate(IceCandidateInterface $candidate): void
     {
         $this->connectionProtocol->setCandidate($candidate);
     }
@@ -181,6 +207,7 @@ class Turn implements TurnInterface
      * @param InternetAddress|null $address
      * @return void
      */
+    #[\Override]
     public function sendMessage(MessageInterface $message, ?InternetAddress $address): void
     {
         $this->connectionProtocol->sendMessage($message, $address);
@@ -195,9 +222,22 @@ class Turn implements TurnInterface
      * @param int $retransmissions
      * @return array{MessageInterface, InternetAddress|null} The response and where it came from.
      */
+    #[\Override]
     public function request(MessageInterface $message, ?InternetAddress $address, ?string $integrity_key, int $retransmissions = 0): array
     {
         return $this->connectionProtocol->request($message, $address, $integrity_key, $retransmissions);
+    }
+
+    /**
+     * Remove a pending transaction by its ID.
+     *
+     * @param string $transactionId
+     * @return void
+     */
+    #[\Override]
+    public function removeTransaction(string $transactionId): void
+    {
+        $this->connectionProtocol->removeTransaction($transactionId);
     }
 
     /**
@@ -205,6 +245,7 @@ class Turn implements TurnInterface
      *
      * @return string
      */
+    #[\Override]
     public function getId(): string
     {
         return $this->connectionProtocol->getId();
@@ -215,6 +256,7 @@ class Turn implements TurnInterface
      *
      * @return InternetAddress|null
      */
+    #[\Override]
     function getRelayedAddress(): ?InternetAddress
     {
         return $this->connectionProtocol->getRelayedAddress();
@@ -225,9 +267,13 @@ class Turn implements TurnInterface
      *
      * @return string
      */
+    #[\Override]
     function getRelayedHost(): string
     {
-        return $this->connectionProtocol->getRelayedAddress()->getAddress();
+        $relayedAddress = $this->connectionProtocol->getRelayedAddress();
+        assert($relayedAddress !== null);
+
+        return $relayedAddress->getAddress();
     }
 
     /**
@@ -235,9 +281,13 @@ class Turn implements TurnInterface
      *
      * @return int
      */
+    #[\Override]
     function getRelayedPort(): int
     {
-        return $this->connectionProtocol->getRelayedAddress()->getPort();
+        $relayedAddress = $this->connectionProtocol->getRelayedAddress();
+        assert($relayedAddress !== null);
+
+        return $relayedAddress->getPort();
     }
 
     /**
@@ -248,6 +298,7 @@ class Turn implements TurnInterface
      * @param LoggerInterface|null $logger
      * @return Turn
      */
+    #[\Override]
     public static function create(TurnConfigurationInterface $configuration, ReceiverInterface $receiver, ?LoggerInterface $logger = null): Turn
     {
         $turnConnection = $configuration->getTurnTransport() === "tcp" ?

@@ -172,9 +172,8 @@ trait TurnConnection
         if ($response instanceof Message) {
             $timeToExpiry = $response->attributes()->get(MessageAttribute::LIFETIME);
             $relayedAddress = $response->attributes()->get(MessageAttribute::XOR_RELAYED_ADDRESS);
-            if ($relayedAddress instanceof InternetAddress) {
-                $this->relayedAddress = $relayedAddress;
-            }
+            assert($relayedAddress instanceof InternetAddress);
+            $this->relayedAddress = $relayedAddress;
         }
 
         if (is_int($timeToExpiry) && $timeToExpiry !== 0) {
@@ -262,9 +261,7 @@ trait TurnConnection
     {
         if (strlen($data) >= 4 && $this->isChannelData($data)) {
             $unpacked = unpack("nChannel/nLength", substr($data, 0, 4));
-            if ($unpacked === false) {
-                return;
-            }
+            assert($unpacked !== false);
             $channel = (int) $unpacked['Channel'];
             $length = (int) $unpacked['Length'];
             if (strlen($data) >= $length + 4 && $peerAddress = $this->channelToPeer[$channel] ?? null) {
@@ -456,10 +453,8 @@ trait TurnConnection
         }
 
         $errorCodeAttribute = $stunMessage->attributes()->get(MessageAttribute::ERROR_CODE);
-        $errorCode = null;
-        if (is_array($errorCodeAttribute) && isset($errorCodeAttribute[0]) && is_int($errorCodeAttribute[0])) {
-            $errorCode = $errorCodeAttribute[0];
-        }
+        assert(is_array($errorCodeAttribute) && isset($errorCodeAttribute[0]) && is_int($errorCodeAttribute[0]));
+        $errorCode = $errorCodeAttribute[0];
 
         if ($this->configuration->getTurnUsername() !== null &&
             $this->configuration->getTurnPassword() !== null &&
@@ -467,14 +462,12 @@ trait TurnConnection
             ($errorCode === 401 || ($errorCode === 438 && $this->realm !== null))) {
             // Update long-term credentials
             $nonce = $stunMessage->attributes()->get(MessageAttribute::NONCE);
-            if (is_string($nonce)) {
-                $this->nonce = $nonce;
-            }
+            assert(is_string($nonce));
+            $this->nonce = $nonce;
             if ($errorCode == 401) {
                 $realm = $stunMessage->attributes()->get(MessageAttribute::REALM);
-                if (is_string($realm)) {
-                    $this->realm = $realm;
-                }
+                assert(is_string($realm));
+                $this->realm = $realm;
             }
 
             // Retry request with authentication

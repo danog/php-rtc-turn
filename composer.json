@@ -35,18 +35,6 @@
         "danog/php-rtc-mixin": "^1.0",
         "danog/php-rtc-stun": "^1.1.1"
     },
-    "repositories": [
-        {
-            "type": "path",
-            "url": "../stun",
-            "options": {
-                "symlink": true,
-                "versions": {
-                    "danog/php-rtc-stun": "1.1000.0"
-                }
-            }
-        }
-    ],
     "require-dev": {
         "phpunit/phpunit": "^13.0",
         "mockery/mockery": "^1.6",

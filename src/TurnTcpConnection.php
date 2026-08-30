@@ -84,9 +84,7 @@ final class TurnTcpConnection extends TCPConnection implements TurnConnectionInt
 
         while (strlen($this->buffer) >= 4) {
             $unpacked = unpack("nChannel/nLength", substr($this->buffer, 0, 4));
-            if ($unpacked === false) {
-                break;
-            }
+            assert($unpacked !== false);
             $length = (int) $unpacked['Length'];
             $length += Utils::paddingLength($length);
 
@@ -101,9 +99,7 @@ final class TurnTcpConnection extends TCPConnection implements TurnConnectionInt
             }
 
             $address = $this->getRemoteAddress();
-            if ($address === null) {
-                break;
-            }
+            assert($address !== null);
 
             $data = substr($this->buffer, 0, $fullLength);
             $this->onReceived($data, $address);

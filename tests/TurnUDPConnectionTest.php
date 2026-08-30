@@ -10,15 +10,6 @@ use PHPUnit\Framework\TestCase;
 
 
 #[CoversClass(TurnUDPConnection::class)]
-#[UsesClass(\Webrtc\STUN\Enum\MessageAttribute::class)]
-#[UsesClass(\Webrtc\STUN\Exception\TransactionException::class)]
-#[UsesClass(\Webrtc\STUN\Exception\TransactionFailedException::class)]
-#[UsesClass(\Webrtc\STUN\Message\Message::class)]
-#[UsesClass(\Webrtc\STUN\Message\MessageAttributeCollection::class)]
-#[UsesClass(\Webrtc\STUN\Message\MessageAttributeEncoder::class)]
-#[UsesClass(\Webrtc\STUN\Message\MessageIntegrity::class)]
-#[UsesClass(\Webrtc\STUN\Transaction::class)]
-#[UsesClass(\Webrtc\STUN\Utils::class)]
 class TurnUDPConnectionTest extends TestCase
 {
     protected $protocol;

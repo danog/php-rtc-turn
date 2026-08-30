@@ -6,16 +6,7 @@ use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\UsesClass;
 use PHPUnit\Framework\TestCase;
 use Webrtc\Exception\RuntimeException;
-use Webrtc\STUN\Exception\TransactionException;
 use Webrtc\STUN\Exception\TransactionExceptionInterface;
-use Webrtc\STUN\Exception\TransactionFailedException;
-use Webrtc\STUN\Exception\TransactionTimeoutException;
-use Webrtc\STUN\Message\Message;
-use Webrtc\STUN\Message\MessageAttributeCollection;
-use Webrtc\STUN\Message\MessageAttributeEncoder;
-use Webrtc\STUN\Message\MessageIntegrity;
-use Webrtc\STUN\Transaction;
-use Webrtc\STUN\Utils;
 use Webrtc\TURN\Turn;
 use Webrtc\TURN\TurnTcpConnection;
 use Webrtc\TURN\TurnUdpConnection;
@@ -24,16 +15,6 @@ use function Amp\delay;
 
 #[UsesClass(TurnTcpConnection::class)]
 #[UsesClass(TurnUdpConnection::class)]
-#[UsesClass(TransactionException::class)]
-#[UsesClass(TransactionFailedException::class)]
-#[UsesClass(TransactionTimeoutException::class)]
-#[UsesClass(Message::class)]
-#[UsesClass(MessageAttributeCollection::class)]
-#[UsesClass(MessageAttributeEncoder::class)]
-#[UsesClass(MessageIntegrity::class)]
-#[UsesClass(Transaction::class)]
-#[UsesClass(Utils::class)]
-#[UsesClass(\Webrtc\STUN\Enum\MessageAttribute::class)]
 #[CoversClass(Turn::class)]
 class TurnTest extends TestCase
 {

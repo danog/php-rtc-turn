@@ -13,6 +13,7 @@ jobs:
   test:
     runs-on: ${{ matrix.os }}
     strategy:
+      fail-fast: false
       matrix:
         # The tests run against a real Coturn server. Coturn is a Unix daemon with
         # no Chocolatey package or Windows build, so Windows is excluded.
@@ -62,9 +63,11 @@ jobs:
           turnserver -c /tmp/turnserver/turnserver.conf -v > /tmp/turnserver/turnserver.out 2>&1 &
           TURN_PID=$!
 
-          # Wait for the server to open its listening ports.
+          # Wait for the server to open its listening ports. `ss` and `netstat -p`
+          # are Linux-only, so use lsof (preinstalled on both runners) to stay
+          # cross-platform.
           for i in $(seq 1 30); do
-            if (ss -tulnp 2>/dev/null || netstat -tulpn 2>/dev/null) | grep -E '3478|5349' >/dev/null; then
+            if lsof -nP -i 2>/dev/null | grep -E ':(3478|5349) ' >/dev/null; then
               echo "Coturn is up (pid $TURN_PID)"
               exit 0
             fi

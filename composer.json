@@ -32,7 +32,7 @@
         "amphp/socket": "^2.4.1",
         "psr/log": "^3.0.2",
         "danog/php-rtc-exception": "^1.1.5",
-        "danog/php-rtc-mixin": "^1.1.6",
+        "danog/php-rtc-mixin": "^2.0",
         "danog/php-rtc-stun": "^1.1.8"
     },
     "require-dev": {

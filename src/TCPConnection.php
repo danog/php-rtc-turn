@@ -51,10 +51,8 @@ abstract class TCPConnection extends BaseProtocol
      */
     public function __serialize(): array
     {
-        $remote = $this->socket->getRemoteAddress();
-
         return SerializableState::export($this, [
-            'socket' => ['_tcp' => $remote !== null ? (string) $remote : null],
+            'socket' => ['_tcp' => (string) $this->socket->getRemoteAddress()],
         ]);
     }
 
@@ -64,14 +62,20 @@ abstract class TCPConnection extends BaseProtocol
     public function __unserialize(array $data): void
     {
         $remote = null;
+        /**
+         * @var mixed $value
+         */
         foreach ($data as $key => $value) {
-            if (is_array($value) && array_key_exists('_tcp', $value)) {
+            if (!is_array($value) || !array_key_exists('_tcp', $value)) {
+                continue;
+            }
+            unset($data[$key]);
+            if (is_string($value['_tcp'])) {
                 $remote = $value['_tcp'];
-                unset($data[$key]);
             }
         }
         SerializableState::import($this, $data);
-        $this->restoreTcpSocket(is_string($remote) ? $remote : null);
+        $this->restoreTcpSocket($remote);
     }
 
     /**

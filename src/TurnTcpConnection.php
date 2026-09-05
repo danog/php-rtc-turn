@@ -20,6 +20,7 @@ use Amp\Socket\Socket;
 use function Amp\Socket\connect;
 use Throwable;
 use Webrtc\Exception\RuntimeException;
+use Webrtc\Mixin\SerializableState;
 use Webrtc\STUN\ReceiverInterface;
 use Webrtc\STUN\Trait\Request;
 use Webrtc\STUN\Utils;
@@ -171,5 +172,28 @@ final class TurnTcpConnection extends TCPConnection implements TurnConnectionInt
         }
         $this->socket = $socket;
         $this->listen();
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    #[\Override]
+    public function __serialize(): array
+    {
+        return SerializableState::export($this, [
+            'socket' => ['_tcp' => (string) $this->socket->getRemoteAddress()],
+            ...$this->turnSerializeReplacements(),
+        ]);
+    }
+
+    /**
+     * @param array<string, mixed> $data
+     */
+    #[\Override]
+    public function __unserialize(array $data): void
+    {
+        $restartRefresh = $this->consumeTurnRefreshFlag($data);
+        parent::__unserialize($data);
+        $this->restoreTurnTimers($restartRefresh);
     }
 }

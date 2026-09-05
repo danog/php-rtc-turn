@@ -400,6 +400,48 @@ trait TurnConnection
         $this->refresh();
     }
 
+    /**
+     * @return array<string, mixed>
+     */
+    protected function turnSerializeReplacements(): array
+    {
+        return [
+            'refreshPeriodicTimer' => $this->refreshPeriodicTimer !== null,
+            'peerBinding' => [],
+        ];
+    }
+
+    /**
+     * @param array<string, mixed> $data
+     */
+    protected function consumeTurnRefreshFlag(array &$data): bool
+    {
+        $restartRefresh = false;
+        /**
+         * @var mixed $value
+         */
+        foreach ($data as $key => $value) {
+            if (str_ends_with($key, "\0refreshPeriodicTimer")) {
+                $restartRefresh = $value === true;
+                $data[$key] = null;
+            }
+        }
+
+        return $restartRefresh;
+    }
+
+    protected function restoreTurnTimers(bool $restartRefresh): void
+    {
+        $this->peerBinding = [];
+        $this->refreshPeriodicTimer = null;
+        if ($restartRefresh && $this->relayedAddress !== null) {
+            $this->refreshPeriodicTimer = EventLoop::repeat(
+                $this->lifetime * 5 / 6,
+                $this->onRefreshTimer(...),
+            );
+        }
+    }
+
     private function refresh(): void
     {
         $messageAttr = [

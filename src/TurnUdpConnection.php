@@ -17,6 +17,7 @@ use Ramsey\Uuid\Uuid;
 use Amp\Socket\UdpSocket;
 use Throwable;
 use Webrtc\Exception\RuntimeException;
+use Webrtc\Mixin\SerializableState;
 use Webrtc\STUN\Datagram;
 use Webrtc\STUN\ReceiverInterface;
 use Webrtc\STUN\Trait\Request;
@@ -94,5 +95,30 @@ final class TurnUdpConnection extends Datagram implements TurnConnectionInterfac
         } catch (Throwable $e) {
             throw new RuntimeException(sprintf("Could not bind to %s", $e->getMessage()), (int) $e->getCode(), $e);
         }
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    #[\Override]
+    public function __serialize(): array
+    {
+        $address = $this->socket->getAddress();
+
+        return SerializableState::export($this, [
+            'socket' => ['_udp' => [$address->getAddress(), $address->getPort()]],
+            ...$this->turnSerializeReplacements(),
+        ]);
+    }
+
+    /**
+     * @param array<string, mixed> $data
+     */
+    #[\Override]
+    public function __unserialize(array $data): void
+    {
+        $restartRefresh = $this->consumeTurnRefreshFlag($data);
+        parent::__unserialize($data);
+        $this->restoreTurnTimers($restartRefresh);
     }
 }

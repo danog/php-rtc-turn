@@ -153,4 +153,23 @@ final class TurnTcpConnection extends TCPConnection implements TurnConnectionInt
             throw new RuntimeException(sprintf("Could not connect to %s - %s", $address, $e->getMessage()), (int) $e->getCode(), $e);
         }
     }
+
+    #[\Override]
+    protected function restoreTcpSocket(?string $remote): void
+    {
+        $turnServer = $this->configuration->getTurnServer();
+        if ($turnServer === null || !isset($turnServer[0], $turnServer[1])) {
+            return;
+        }
+        $address = implode(":", array_map(static fn (mixed $part): string => (string) $part, $turnServer));
+        $context = (new ConnectContext())->withTlsContext(
+            (new ClientTlsContext((string) $turnServer[0]))->withoutPeerVerification()
+        );
+        $socket = connect($address, $context);
+        if ($this->configuration->getTurnSsl()) {
+            $socket->setupTls();
+        }
+        $this->socket = $socket;
+        $this->listen();
+    }
 }

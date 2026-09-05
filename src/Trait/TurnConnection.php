@@ -180,9 +180,7 @@ trait TurnConnection
             // Refresh well before the allocation expires, as RFC 8656 section 3.2 advises.
             $this->refreshPeriodicTimer = EventLoop::repeat(
                 $timeToExpiry * 5 / 6,
-                function (): void {
-                    $this->refresh();
-                }
+                $this->onRefreshTimer(...),
             );
         }
 
@@ -397,6 +395,11 @@ trait TurnConnection
      * @return void
      * @throws RandomException
      */
+    public function onRefreshTimer(): void
+    {
+        $this->refresh();
+    }
+
     private function refresh(): void
     {
         $messageAttr = [

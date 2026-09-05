@@ -14,8 +14,10 @@ namespace Webrtc\TURN;
 use Amp\Socket\InternetAddress;
 use Amp\Socket\Socket;
 use Throwable;
+use Webrtc\Mixin\SerializableState;
 use Webrtc\STUN\BaseProtocol;
 use function Amp\async;
+use function Amp\Socket\connect;
 
 /**
  * Abstract TCP Connection Class
@@ -44,6 +46,46 @@ abstract class TCPConnection extends BaseProtocol
         $this->listen();
     }
 
+    /**
+     * @return array<string, mixed>
+     */
+    public function __serialize(): array
+    {
+        $remote = $this->socket->getRemoteAddress();
+
+        return SerializableState::export($this, [
+            'socket' => ['_tcp' => $remote !== null ? (string) $remote : null],
+        ]);
+    }
+
+    /**
+     * @param array<string, mixed> $data
+     */
+    public function __unserialize(array $data): void
+    {
+        $remote = null;
+        foreach ($data as $key => $value) {
+            if (is_array($value) && array_key_exists('_tcp', $value)) {
+                $remote = $value['_tcp'];
+                unset($data[$key]);
+            }
+        }
+        SerializableState::import($this, $data);
+        $this->restoreTcpSocket(is_string($remote) ? $remote : null);
+    }
+
+    /**
+     * Reconnect the TCP socket after unserialize. Subclasses may wrap TLS around this.
+     */
+    protected function restoreTcpSocket(?string $remote): void
+    {
+        if ($remote === null || $remote === '') {
+            return;
+        }
+        $this->socket = connect($remote);
+        $this->listen();
+    }
+
     protected ?InternetAddress $remoteAddress = null;
 
     /**
@@ -52,7 +94,7 @@ abstract class TCPConnection extends BaseProtocol
      * Reading runs in its own fiber rather than through an event emitter, so a read error
      * reaches onError() rather than becoming an unobserved rejection.
      */
-    private function listen(): void
+    protected function listen(): void
     {
         async(function (): void {
             try {

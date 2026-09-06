@@ -392,10 +392,14 @@ trait TurnConnection
      * It updates the internal state and logs the successful refresh with the new expiry time.
      * In case of errors, it logs the failure with
      *
+     * Armed only as the first-class callable `$this->onRefreshTimer(...)` passed to the event
+     * loop, including when the refresh timer is restored after unserialize. That callable keeps
+     * this method's private scope, so the loop can drive it without it being public.
+     *
      * @return void
      * @throws RandomException
      */
-    public function onRefreshTimer(): void
+    private function onRefreshTimer(): void
     {
         $this->refresh();
     }

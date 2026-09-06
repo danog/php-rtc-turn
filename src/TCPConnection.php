@@ -100,25 +100,51 @@ abstract class TCPConnection extends BaseProtocol
      */
     protected function listen(): void
     {
-        async(function (): void {
+        // The read loop must not capture $this, or the fiber the event loop parks in read() would
+        // pin this connection forever and an unset()+gc could never reclaim it. It holds the socket
+        // and only a weak reference back; __destruct() closes the socket to unwind the fiber once
+        // the last real reference is gone.
+        $weak = \WeakReference::create($this);
+        $socket = $this->socket;
+        async(static function () use ($weak, $socket): void {
             try {
-                while (($chunk = $this->socket->read()) !== null) {
-                    if ($this->paused) {
+                while (($chunk = $socket->read()) !== null) {
+                    $self = $weak->get();
+                    if ($self === null) {
+                        $socket->close();
+
+                        return;
+                    }
+                    if ($self->paused) {
                         continue;
                     }
 
                     // Dispatch in its own fiber: handling data can block on a transaction of
                     // its own, and doing that inline would stop this loop from reading the
                     // reply it is waiting for.
-                    async(fn () => $this->onTCPReceived($chunk))->ignore();
+                    async(static fn () => $weak->get()?->onTCPReceived($chunk))->ignore();
+                    unset($self);
                 }
 
-                $this->onEnded();
-                $this->onClose();
+                $self = $weak->get();
+                if ($self !== null) {
+                    $self->onEnded();
+                    $self->onClose();
+                }
             } catch (Throwable $e) {
-                $this->onError($e);
+                $weak->get()?->onError($e);
             }
         });
+    }
+
+    /**
+     * Release the socket when the connection is garbage-collected, unblocking the parked read loop.
+     */
+    public function __destruct()
+    {
+        if (isset($this->socket)) {
+            $this->socket->close();
+        }
     }
 
     /**

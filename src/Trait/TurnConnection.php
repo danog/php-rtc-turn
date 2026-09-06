@@ -178,10 +178,7 @@ trait TurnConnection
 
         if (is_int($timeToExpiry) && $timeToExpiry !== 0) {
             // Refresh well before the allocation expires, as RFC 8656 section 3.2 advises.
-            $this->refreshPeriodicTimer = EventLoop::repeat(
-                $timeToExpiry * 5 / 6,
-                $this->onRefreshTimer(...),
-            );
+            $this->armRefreshTimer($timeToExpiry * 5 / 6);
         }
 
         return $this->relayedAddress;
@@ -439,11 +436,29 @@ trait TurnConnection
         $this->peerBinding = [];
         $this->refreshPeriodicTimer = null;
         if ($restartRefresh && $this->relayedAddress !== null) {
-            $this->refreshPeriodicTimer = EventLoop::repeat(
-                $this->lifetime * 5 / 6,
-                $this->onRefreshTimer(...),
-            );
+            $this->armRefreshTimer($this->lifetime * 5 / 6);
         }
+    }
+
+    /**
+     * Arm the TURN allocation-refresh timer without pinning this connection.
+     *
+     * Registering it as $this->onRefreshTimer(...) captures $this strongly, so the event loop would
+     * keep the connection alive forever and an unset()+gc could never reclaim it. A weak reference
+     * lets it be collected; the tick cancels itself once the owner is gone.
+     */
+    private function armRefreshTimer(float $interval): void
+    {
+        $weak = \WeakReference::create($this);
+        $this->refreshPeriodicTimer = EventLoop::repeat($interval, static function (string $id) use ($weak): void {
+            $self = $weak->get();
+            if ($self === null) {
+                EventLoop::cancel($id);
+
+                return;
+            }
+            $self->onRefreshTimer();
+        });
     }
 
     private function refresh(): void

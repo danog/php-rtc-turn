@@ -142,9 +142,9 @@ abstract class TCPConnection extends BaseProtocol
      */
     public function __destruct()
     {
-        if (isset($this->socket)) {
-            $this->socket->close();
-        }
+        // socket is always set here: the constructor connects it, a successful unserialize
+        // reconnects it, and __destruct never runs on an object whose __unserialize threw.
+        $this->socket->close();
     }
 
     /**

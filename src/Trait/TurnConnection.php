@@ -207,7 +207,7 @@ trait TurnConnection
     protected function onError(Throwable $e): void
     {
         $this->logger?->error("An error occurred while transmitting", ["ErrorMessage" => $e->getMessage()]);
-        $this->receiver->onError($e);
+        $this->receiver?->get()?->onError($e);
         $this->delete();
     }
 
@@ -223,7 +223,7 @@ trait TurnConnection
     protected function onClose(): void
     {
         $this->logger?->debug("The connection has been closed", ["Address" => $this->getLocalAddress()]);
-        $this->receiver->onClose();
+        $this->receiver?->get()?->onClose($this);
         @$this->delete();
     }
 
@@ -238,7 +238,7 @@ trait TurnConnection
     protected function onEnded(): void
     {
         $this->logger?->debug("The connection has been Ended", ["Address" => $this->getLocalAddress()]);
-        $this->receiver->onClose();
+        $this->receiver?->get()?->onClose($this);
     }
 
     /**
@@ -262,14 +262,15 @@ trait TurnConnection
             if (strlen($data) >= $length + 4 && $peerAddress = $this->channelToPeer[$channel] ?? null) {
                 $payload = substr($data, 4, $length);
                 if ($message = $this->decodeMessage($payload)) {
-                    $this->handleMessage($message, $peerAddress, $data);
+                    // The message without the ChannelData header, which its integrity is checked on.
+                    $this->handleMessage($message, $peerAddress, $payload);
                 } else {
 // The STUN layer's candidate type (Webrtc\ICE\RTCIceCandidate in older
                     // published releases of php-rtc-stun, Webrtc\STUN\IceCandidateInterface in the
                     // current one) may not be resolvable in some environments, because the ICE
                     // package (which contains the concrete RTCIceCandidate) is intentionally not a
                     // dependency of the TURN package. All we need from it is the component id.
-                    $this->receiver->onDataReceived($payload, $this->getCandidate()?->getComponentId() ?? 0);
+                    $this->receiver?->get()?->onDataReceived($payload, $this->getCandidate()?->getComponentId() ?? 0);
                 }
             }
 
@@ -280,13 +281,34 @@ trait TurnConnection
             $messageClass = $message->getMessageClass();
             $transactionId = $message->getTransactionId();
 
+            // A request sent by a peer straight to the socket of the allocation, rather than to the relayed address,
+            // is not answered: that would validate a path the data (always relayed) doesn't take.
             if (in_array($messageClass, [MessageClass::RESPONSE, MessageClass::ERROR]) && isset($this->transactionIds[$transactionId])) {
                 $transaction = $this->transactionIds[$transactionId];
                 $transaction->responseReceived($message, $peerAddress);
-            }elseif ($messageClass === MessageClass::REQUEST) {
-                $this->receiver->onRequestReceived($message, $peerAddress, $this, $data);
             }
         }
+    }
+
+    /**
+     * Sends a STUN message: to the TURN server, or to a peer through the relay.
+     *
+     * The connectivity checks of the relayed candidate, and the answers to the ones it receives, are relayed like
+     * the data: sent from the socket of the allocation, they would validate a path the data doesn't take.
+     *
+     * @param MessageInterface $message The message to send
+     * @param InternetAddress|null $address The peer, or null for the TURN server
+     * @throws RandomException
+     */
+    public function sendMessage(MessageInterface $message, ?InternetAddress $address): void
+    {
+        if ($address === null) {
+            $this->logger?->debug("Send a STUN/TURN Message", ["Message" => $message->humanReadable()]);
+            $this->send((string) $message);
+            return;
+        }
+        $this->logger?->debug("Relay a STUN Message", ["Message" => $message->humanReadable(), "ToAddress" => $address]);
+        $this->sendData((string) $message, $address);
     }
 
     /**
@@ -331,7 +353,7 @@ trait TurnConnection
             $transaction = $this->transactionIds[$transactionId];
             $transaction->responseReceived($message, $address);
         } elseif ($messageClass === MessageClass::REQUEST) {
-            $this->receiver->onRequestReceived($message, $address, $this, $data);
+            $this->receiver?->get()?->onRequestReceived($message, $address, $this, $data);
         }
     }
 
@@ -634,6 +656,8 @@ trait TurnConnection
             $deferred->complete();
         } catch (\Throwable $e) {
             unset($this->peerBinding[$addressKey]);
+            // Fibers waiting for this bind get the error, but there might be none: it's thrown here anyway.
+            $deferred->getFuture()->ignore();
             $deferred->error($e);
 
             throw $e;

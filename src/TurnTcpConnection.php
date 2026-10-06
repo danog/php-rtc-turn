@@ -32,10 +32,20 @@ use Webrtc\TURN\Trait\TurnConnection;
  */
 final class TurnTcpConnection extends TCPConnection implements TurnConnectionInterface
 {
-    use Request, TurnConnection;
+    use Request, TurnConnection {
+        TurnConnection::sendMessage insteadof Request;
+    }
 
     private string $id;
     private string $buffer = "";
+
+    /**
+     * The receiver of the messages, which owns this protocol: not owned by it, so that a pending
+     * request doesn't keep the receiver alive.
+     *
+     * @var \WeakReference<ReceiverInterface>|null
+     */
+    private ?\WeakReference $receiver;
 
     /**
      * @param TurnConfigurationInterface $configuration
@@ -44,10 +54,11 @@ final class TurnTcpConnection extends TCPConnection implements TurnConnectionInt
      * @param Socket $socket
      */
     public function __construct(private readonly TurnConfigurationInterface $configuration,
-                                private readonly ReceiverInterface          $receiver,
+                                ReceiverInterface                           $receiver,
                                 private readonly ?LoggerInterface            $logger,
                                 Socket                                      $socket)
     {
+        $this->receiver = \WeakReference::create($receiver);
         parent::__construct($socket);
         $this->id = Uuid::uuid4()->toString();
     }
@@ -182,6 +193,7 @@ final class TurnTcpConnection extends TCPConnection implements TurnConnectionInt
     {
         return SerializableState::export($this, [
             'socket' => ['_tcp' => (string) $this->socket->getRemoteAddress()],
+            'receiver' => $this->receiver?->get(),
             ...$this->turnSerializeReplacements(),
         ]);
     }
@@ -193,6 +205,10 @@ final class TurnTcpConnection extends TCPConnection implements TurnConnectionInt
     public function __unserialize(array $data): void
     {
         $restartRefresh = $this->consumeTurnRefreshFlag($data);
+        $key = self::class . "\0receiver";
+        // Before the socket is listened to again.
+        $this->receiver = isset($data[$key]) && $data[$key] instanceof ReceiverInterface ? \WeakReference::create($data[$key]) : null;
+        unset($data[$key]);
         parent::__unserialize($data);
         $this->restoreTurnTimers($restartRefresh);
     }

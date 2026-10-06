@@ -22,7 +22,7 @@ class Receiver implements ReceiverInterface
         $this->messages[] = $message;
     }
 
-    public function onClose(): void
+    public function onClose(?IceConnectionProtocolInterface $protocol = null): void
     {
     }
 

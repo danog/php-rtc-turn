@@ -30,9 +30,19 @@ use function Amp\Socket\bindUdpSocket;
  */
 final class TurnUdpConnection extends Datagram implements TurnConnectionInterface
 {
-    use Request, TurnConnection;
+    use Request, TurnConnection {
+        TurnConnection::sendMessage insteadof Request;
+    }
 
     private string $id;
+
+    /**
+     * The receiver of the messages, which owns this protocol: not owned by it, so that a pending
+     * request doesn't keep the receiver alive.
+     *
+     * @var \WeakReference<ReceiverInterface>|null
+     */
+    private ?\WeakReference $receiver;
 
     /**
      * @param TurnConfigurationInterface $configuration
@@ -41,10 +51,11 @@ final class TurnUdpConnection extends Datagram implements TurnConnectionInterfac
      * @param UdpSocket $socket
      */
     public function __construct(private readonly TurnConfigurationInterface $configuration,
-                                private readonly ReceiverInterface          $receiver,
+                                ReceiverInterface                           $receiver,
                                 private readonly ?LoggerInterface            $logger,
                                 UdpSocket                                   $socket)
     {
+        $this->receiver = \WeakReference::create($receiver);
         $turnServer = $this->configuration->getTurnServer();
         if ($turnServer === null || !isset($turnServer[0], $turnServer[1])) {
             throw new RuntimeException('No TURN server is configured');
@@ -107,6 +118,7 @@ final class TurnUdpConnection extends Datagram implements TurnConnectionInterfac
 
         return SerializableState::export($this, [
             'socket' => ['_udp' => [$address->getAddress(), $address->getPort()]],
+            'receiver' => $this->receiver?->get(),
             ...$this->turnSerializeReplacements(),
         ]);
     }
@@ -118,6 +130,10 @@ final class TurnUdpConnection extends Datagram implements TurnConnectionInterfac
     public function __unserialize(array $data): void
     {
         $restartRefresh = $this->consumeTurnRefreshFlag($data);
+        $key = self::class . "\0receiver";
+        // Before the socket is listened to again.
+        $this->receiver = isset($data[$key]) && $data[$key] instanceof ReceiverInterface ? \WeakReference::create($data[$key]) : null;
+        unset($data[$key]);
         parent::__unserialize($data);
         $this->restoreTurnTimers($restartRefresh);
     }

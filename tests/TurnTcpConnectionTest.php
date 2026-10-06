@@ -2,6 +2,7 @@
 
 namespace Tests\Webrtc\TURN;
 
+use Amp\Socket\InternetAddress;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\UsesClass;
 use Webrtc\STUN\Message\Message;
@@ -39,7 +40,11 @@ class TurnTcpConnectionTest extends TestCase
 
     public function testReceiveStunFragmented()
     {
-        $data = file_get_contents(__DIR__ . "/fixture/binding_request.bin");
+        // A connectivity check of a peer, relayed on the channel bound to it.
+        $channel = 0x4000;
+        (new \ReflectionProperty(TurnTcpConnection::class, 'channelToPeer'))->setValue($this->protocol, [$channel => new InternetAddress('192.0.2.1', 4000)]);
+        $request = file_get_contents(__DIR__ . "/fixture/binding_request.bin");
+        $data = pack("nn", $channel, \strlen($request)) . $request;
         $this->protocol->onTCPReceived(substr($data, 0, 10));
         $this->protocol->onTCPReceived(substr($data, 10));
 
@@ -48,6 +53,15 @@ class TurnTcpConnectionTest extends TestCase
             "ID: 4e766678336c553746554246 - Class: REQUEST - Method: BINDING - Attributes: No Attributes",
             $this->receiver->getMessages()[0]->humanReadable()
         );
+    }
+
+    public function testIgnoreRequestNotRelayed()
+    {
+        // Sent straight to the connection of the allocation rather than through the relay, which the data never
+        // comes from: answering it would validate a path that drops all data.
+        $this->protocol->onTCPReceived(file_get_contents(__DIR__ . "/fixture/binding_request.bin"));
+
+        $this->assertEmpty($this->receiver->getMessages());
     }
 
     public function testReceiveJunk()

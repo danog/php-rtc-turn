@@ -594,6 +594,9 @@ trait TurnConnection
         }
     }
 
+    /** Whether madeline_crypto 0.5+ is loaded (null: not checked yet). */
+    private static ?bool $nativeCrypto = null;
+
     /**
      * Creates an integrity key for authentication.
      *
@@ -604,7 +607,7 @@ trait TurnConnection
     private function makeIntegrityKey(): void
     {
         $credentials = implode(":", [$this->configuration->getTurnUsername(), $this->realm, $this->configuration->getTurnPassword()]);
-        $this->integrityKey = \extension_loaded('madeline_crypto') && version_compare(Crypto::version(), '0.5.0', '>=')
+        $this->integrityKey = (self::$nativeCrypto ??= \extension_loaded('madeline_crypto') && version_compare(Crypto::version(), '0.5.0', '>='))
             ? Hash::digest('md5', $credentials)
             : md5($credentials, true);
     }

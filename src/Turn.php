@@ -223,7 +223,7 @@ final class Turn implements TurnInterface
      * @return array{MessageInterface, InternetAddress|null} The response and where it came from.
      */
     #[\Override]
-    public function request(MessageInterface $message, ?InternetAddress $address, ?string $integrity_key, int $retransmissions = 0): array
+    public function request(MessageInterface $message, ?InternetAddress $address, #[\SensitiveParameter] ?string $integrity_key, int $retransmissions = 0): array
     {
         return $this->connectionProtocol->request($message, $address, $integrity_key, $retransmissions);
     }

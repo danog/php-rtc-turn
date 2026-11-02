@@ -27,7 +27,7 @@ interface TurnConfigurationInterface
 
     public function getTurnPassword(): string|null;
 
-    public function setTurnPassword(string $turnPassword): void;
+    public function setTurnPassword(#[\SensitiveParameter] string $turnPassword): void;
 
     public function getTurnTransport(): string;
 

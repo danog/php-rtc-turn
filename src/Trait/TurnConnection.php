@@ -12,6 +12,8 @@
 namespace Webrtc\TURN\Trait;
 
 use Amp\Socket\InternetAddress;
+use danog\MadelineProto\Native\Crypto;
+use danog\MadelineProto\Native\Hash;
 use Exception;
 use Random\RandomException;
 use Amp\DeferredFuture;
@@ -261,7 +263,8 @@ trait TurnConnection
             $length = (int) $unpacked['Length'];
             if (strlen($data) >= $length + 4 && $peerAddress = $this->channelToPeer[$channel] ?? null) {
                 $payload = substr($data, 4, $length);
-                if ($message = $this->decodeMessage($payload)) {
+                // Most relayed datagrams are media: only STUN messages are decoded.
+                if (Message::isStun($payload) && $message = $this->decodeMessage($payload)) {
                     // The message without the ChannelData header, which its integrity is checked on.
                     $this->handleMessage($message, $peerAddress, $payload);
                 } else {
@@ -277,7 +280,7 @@ trait TurnConnection
             return;
         }
 
-        if ($message = $this->decodeMessage($data)) {
+        if (Message::isStun($data) && $message = $this->decodeMessage($data)) {
             $messageClass = $message->getMessageClass();
             $transactionId = $message->getTransactionId();
 
@@ -591,6 +594,9 @@ trait TurnConnection
         }
     }
 
+    /** Whether madeline_crypto 0.5+ is loaded (null: not checked yet). */
+    private static ?bool $nativeCrypto = null;
+
     /**
      * Creates an integrity key for authentication.
      *
@@ -600,7 +606,10 @@ trait TurnConnection
      */
     private function makeIntegrityKey(): void
     {
-        $this->integrityKey = md5(implode(":", [$this->configuration->getTurnUsername(), $this->realm, $this->configuration->getTurnPassword()]), true);
+        $credentials = implode(":", [$this->configuration->getTurnUsername(), $this->realm, $this->configuration->getTurnPassword()]);
+        $this->integrityKey = (self::$nativeCrypto ??= \extension_loaded('madeline_crypto') && version_compare(Crypto::version(), '0.5.0', '>='))
+            ? Hash::digest('md5', $credentials)
+            : md5($credentials, true);
     }
 
     /**
